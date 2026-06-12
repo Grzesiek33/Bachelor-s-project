@@ -5,7 +5,7 @@ from shapely.geometry import Point, Polygon
 from shapely import wkt
 import numpy as np
 
-city = "Cocabamba"
+city = "San_francisco"
 
 folder = Path(f"../../{city}/l1a_frames")
 

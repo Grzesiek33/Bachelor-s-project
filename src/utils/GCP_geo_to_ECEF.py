@@ -2,7 +2,7 @@ import json
 
 from pyproj import Transformer
 
-city = "Cocabamba"
+city = "San_francisco"
 
 transformer = Transformer.from_crs(
         "EPSG:4326",  # lat lon height

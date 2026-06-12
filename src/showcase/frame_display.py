@@ -50,7 +50,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
     colors = ["red", "green", "blue", "orange", "purple", "cyan", "magenta", "yellow", "brown", "pink"]
 
-    GCPs_colprs = {GCP: colors[i % len(colors)] for i, GCP in enumerate(GCPs)}
+    GCPs_colors = {GCP: colors[i % len(colors)] for i, GCP in enumerate(GCPs)}
+
+    print(GCPs_colors)
 
 
     with open(f"../../{city}/l1a_frames/"+frame_path+"_pinhole.json", "r") as f:
@@ -71,12 +73,12 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
     if control_GCPs is None:
         control_GCPs = {}
         for ct in cities:
-            control_GCPs[ct] = 0
+            control_GCPs[ct] = ""
             for cam in realGCPsposition[ct]:
                 for frame in realGCPsposition[ct][cam]:
                     for GCP in realGCPsposition[ct][cam][frame]["GCPs"]:
                         if realGCPsposition[ct][cam][frame]["GCPs"][GCP]["control"] == 1:
-                            control_GCPs[ct] += 1
+                            control_GCPs[ct] += GCP + ", "
 
     P_projective = torch.tensor(FramePSMinfo["P_projective"], dtype=torch.float64)
     P_camera = torch.tensor(FramePSMinfo["P_camera"], dtype=torch.float64)
@@ -105,11 +107,11 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             im_x = im_space[0] / im_space[2]
             im_y = im_space[1] / im_space[2]
             if model == "both" or model == "PSM":
-                plt.scatter(im_x, im_y, color=GCPs_colprs[GCP], marker="x", label=f"{GCP} PSM", s=100)
+                plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="x", label=f"{GCP} PSM", s=100)
 
             im_x, im_y = RFM_model(lon, lat, alt)
             if model == "both" or model == "RFM":
-                plt.scatter(im_y, im_x, color=GCPs_colprs[GCP], marker="+", label=f"{GCP} RFM", s=100)
+                plt.scatter(im_y, im_x, color=GCPs_colors[GCP], marker="+", label=f"{GCP} RFM", s=100)
 
     if show_optimized_GCPs:
 
@@ -183,11 +185,11 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                 im_x = im_space[0] / im_space[2]
                 im_y = im_space[1] / im_space[2]
                 if model == "both" or model == "PSM":
-                    plt.scatter(im_x, im_y, color=GCPs_colprs[GCP], marker="o", label=f"{GCP} (corrected position PSM)", s=100)
+                    plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="o", label=f"{GCP} (corrected position PSM)", s=100)
 
                 im_y, im_x = RFM_model(lon, lat, alt)
                 if model == "both" or model == "RFM":
-                    plt.scatter(im_x, im_y, color=GCPs_colprs[GCP], marker="*", label=f"{GCP} (corrected position RFM)", s=100)
+                    plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="*", label=f"{GCP} (corrected position RFM)", s=100)
 
     if show_real_GCPs:
         for GCP in realGCPsposition[city][frame_path.split("_")[2]][frame_path]["GCPs"]:
@@ -199,11 +201,11 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             else:
                 marker = "v"
 
-            plt.scatter(real_im_x, real_im_y, color=GCPs_colprs[GCP], marker=marker, label=f"{GCP} (real position) "+("control" if realGCPsposition[city][frame_path.split("_")[2]][frame_path]["GCPs"][GCP]["control"]==1 else "used for correction"), s=100)
+            plt.scatter(real_im_x, real_im_y, color=GCPs_colors[GCP], marker=marker, label=f"{GCP} (real position) "+("control" if realGCPsposition[city][frame_path.split("_")[2]][frame_path]["GCPs"][GCP]["control"]==1 else "used for correction"), s=100)
 
     plt.tight_layout()
     plt.subplots_adjust(right=0.7)
-    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=20)
     plt.title(f"corrected on {corrected_by} using {optimized_function} function with {method_PSM} and {method_RFM} method"+(f" restricted to {restricted_to}" if restricted_to is not None else "")+(f" excluding {exclude}" if exclude is not None else ""), fontsize=20)
     plt.show()
 
@@ -211,14 +213,20 @@ if __name__ == "__main__":
 
     # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", show_real_GCPs=False, show_optimized_GCPs=False, show_projected_GCPs=False, city="Cocabamba")
 
-    # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="shift")
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="linear")
+    # show_GCPs_on_frame("1293562079.26564479_sc00113_c1_PAN_i0000000150", method_PSM="gradient", optimized_function="shift")
+
+
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="shift")
+    # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="linear")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="quadratic")
+
+    # show_GCPs_on_frame("1293562079.69835258_sc00113_c1_PAN_i0000000170", method_PSM="gradient", optimized_function="quadratic")
+    # show_GCPs_on_frame("1293562079.69835258_sc00113_c1_PAN_i0000000170", method_PSM="gradient", optimized_function="linear")
 
     # show_GCPs_on_frame("1291951336.19337702_sc00103_c1_PAN_i0000000100", method_PSM="gradient", optimized_function="shift", city="Angkor_wat")
     # show_GCPs_on_frame("1291951336.19337702_sc00103_c1_PAN_i0000000100", method_PSM="gradient", optimized_function="linear", city="Angkor_wat")
     # show_GCPs_on_frame("1291951336.19337702_sc00103_c1_PAN_i0000000100", method_PSM="gradient", optimized_function="quadratic", city="Angkor_wat")
 
     # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", method_PSM="gradient", optimized_function="shift", city="Cocabamba")
-    show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", method_PSM="gradient", optimized_function="linear", city="Cocabamba")
+    # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", method_PSM="gradient", optimized_function="linear", city="Cocabamba")
     # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", method_PSM="gradient", optimized_function="quadratic", city="Cocabamba")
