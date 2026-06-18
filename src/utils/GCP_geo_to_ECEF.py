@@ -18,7 +18,7 @@ for gcp in GCPs:
     lon = float(GCPs[gcp]["lon"])
     alt = float(GCPs[gcp]["alt"])
 
-    x_ecef, y_ecef, z_ecef = transformer.transform(lat, lon, alt)
+    x_ecef, y_ecef, z_ecef = transformer.transform(lon, lat, alt)
     GCPs[gcp]["x_ecef"] = x_ecef
     GCPs[gcp]["y_ecef"] = y_ecef
     GCPs[gcp]["z_ecef"] = z_ecef

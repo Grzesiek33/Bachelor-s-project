@@ -52,8 +52,6 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
     GCPs_colors = {GCP: colors[i % len(colors)] for i, GCP in enumerate(GCPs)}
 
-    print(GCPs_colors)
-
 
     with open(f"../../{city}/l1a_frames/"+frame_path+"_pinhole.json", "r") as f:
         FramePSMinfo = json.load(f)
@@ -98,9 +96,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             y_ecef = float(meta_data["y_ecef"])
             z_ecef = float(meta_data["z_ecef"])
 
-            lon = float(meta_data["lon"])
-            lat = float(meta_data["lat"])
-            alt = float(meta_data["alt"])
+            B = float(meta_data["lat"])
+            L = float(meta_data["lon"])
+            H = float(meta_data["alt"])
 
             im_space = P_projective @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
 
@@ -109,9 +107,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             if model == "both" or model == "PSM":
                 plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="x", label=f"{GCP} PSM", s=100)
 
-            im_x, im_y = RFM_model(lon, lat, alt)
+            im_y, im_x = RFM_model(B, L, H)
             if model == "both" or model == "RFM":
-                plt.scatter(im_y, im_x, color=GCPs_colors[GCP], marker="+", label=f"{GCP} RFM", s=100)
+                plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="+", label=f"{GCP} RFM", s=100)
 
     if show_optimized_GCPs:
 
@@ -177,9 +175,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                 y_ecef = float(meta_data["y_ecef"])
                 z_ecef = float(meta_data["z_ecef"])
 
-                lat = float(meta_data["lat"])
-                lon = float(meta_data["lon"])
-                alt = float(meta_data["alt"])
+                B = float(meta_data["lat"])
+                L = float(meta_data["lon"])
+                H = float(meta_data["alt"])
 
                 im_space = P_camera @ P_intrinsic @ P_extrinsic @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
                 im_x = im_space[0] / im_space[2]
@@ -187,7 +185,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                 if model == "both" or model == "PSM":
                     plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="o", label=f"{GCP} (corrected position PSM)", s=100)
 
-                im_y, im_x = RFM_model(lon, lat, alt)
+                im_y, im_x = RFM_model(B, L, H)
                 if model == "both" or model == "RFM":
                     plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="*", label=f"{GCP} (corrected position RFM)", s=100)
 
@@ -216,7 +214,7 @@ if __name__ == "__main__":
     # show_GCPs_on_frame("1293562079.26564479_sc00113_c1_PAN_i0000000150", method_PSM="gradient", optimized_function="shift")
 
 
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="shift")
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="shift", show_real_GCPs=False, show_projected_GCPs=False)
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="linear")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="quadratic")
 

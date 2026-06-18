@@ -19,7 +19,7 @@ def makeAccuracyPlot():
     with open(f"../../San_francisco/own_GCPs/GCPs.json", "r") as f:
         GCPinfo = json.load(f)
 
-    with open(f"../../optimization/linear_PSM.json", "r") as f:
+    with open(f"../../optimization/shift_PSM.json", "r") as f:
         optim = json.load(f)
 
     with open(f"../../San_francisco/own_GCPs/image_position.json", "r") as f:
@@ -43,46 +43,46 @@ def makeAccuracyPlot():
             P_intrinsic = torch.tensor(FramePSMinfo["P_intrinsic"], dtype=torch.float64)
 
             for GCP in realGCPsposition[frame.split("_")[2]][frame]["GCPs"]:
+                if(GCP != str(i)):
 
-                meta_data = GCPinfo[GCP]
-                x_ecef = float(meta_data["x_ecef"])
-                y_ecef = float(meta_data["y_ecef"])
-                z_ecef = float(meta_data["z_ecef"])
+                    meta_data = GCPinfo[GCP]
+                    x_ecef = float(meta_data["x_ecef"])
+                    y_ecef = float(meta_data["y_ecef"])
+                    z_ecef = float(meta_data["z_ecef"])
 
-                real_im_x = realGCPsposition[frame.split("_")[2]][frame]["GCPs"][GCP]["col"]
-                real_im_y = realGCPsposition[frame.split("_")[2]][frame]["GCPs"][GCP]["row"]
+                    real_im_x = realGCPsposition[frame.split("_")[2]][frame]["GCPs"][GCP]["col"]
+                    real_im_y = realGCPsposition[frame.split("_")[2]][frame]["GCPs"][GCP]["row"]
 
-                original_exterior_rotation = FramePSMinfo["exterior_orientation"]
+                    original_exterior_rotation = FramePSMinfo["exterior_orientation"]
 
-                quaternion = torch.tensor(
-                    [original_exterior_rotation["qw_ecef"], original_exterior_rotation["qx_ecef"],
-                     original_exterior_rotation["qy_ecef"],
-                     original_exterior_rotation["qz_ecef"]], dtype=torch.float64)
+                    quaternion = torch.tensor(
+                        [original_exterior_rotation["qw_ecef"], original_exterior_rotation["qx_ecef"],
+                         original_exterior_rotation["qy_ecef"],
+                         original_exterior_rotation["qz_ecef"]], dtype=torch.float64)
 
-                sat_position = torch.tensor(
-                    [original_exterior_rotation["x_ecef_meters"], original_exterior_rotation["y_ecef_meters"],
-                     original_exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
+                    sat_position = torch.tensor(
+                        [original_exterior_rotation["x_ecef_meters"], original_exterior_rotation["y_ecef_meters"],
+                         original_exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
 
-                quaternion, sat_position = globals()["linear_PSM"](
-                    [torch.tensor(p, dtype=torch.float64) for p in params], quaternion,
-                    sat_position)
+                    quaternion, sat_position = globals()["shift_PSM"](
+                        [torch.tensor(p, dtype=torch.float64) for p in params], quaternion,
+                        sat_position)
 
-                P_extrinsic_corrected = create_extrinsic(quaternion, sat_position)
+                    P_extrinsic_corrected = create_extrinsic(quaternion, sat_position)
 
-                im_space = P_camera @ P_intrinsic @ P_extrinsic_corrected @ torch.tensor(
-                    [x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
+                    im_space = P_camera @ P_intrinsic @ P_extrinsic_corrected @ torch.tensor(
+                        [x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
 
-                pred_im_x_PSM = im_space[0] / im_space[2]
-                pred_im_y_PSM = im_space[1] / im_space[2]
+                    pred_im_x_PSM = im_space[0] / im_space[2]
+                    pred_im_y_PSM = im_space[1] / im_space[2]
 
-                error[i-1].append(np.sqrt((pred_im_x_PSM.item() - real_im_x) ** 2 + (pred_im_y_PSM.item() - real_im_y) ** 2))
-
+                    error[i-1].append(np.sqrt((pred_im_x_PSM.item() - real_im_x) ** 2 + (pred_im_y_PSM.item() - real_im_y) ** 2))
         error[i-1] = np.mean(error[i-1]) * 0.69
 
     plt.plot(range(1, 11), error, marker="o")
     plt.xlabel("GCP used for optimization")
     plt.ylabel("Mean error (meters)")
-    plt.title("Accuracy of PSM correction with varying number of GCPs")
+    plt.title("Accuracy of PSM correction for a chosen GCP")
 
     plt.xticks(range(1, 11))
     plt.grid()

@@ -80,7 +80,7 @@ def helper_function_RFM(params, frame, GCP_meta_data, Frameinfo, correction_func
 
     Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs = correction_function(params, Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
 
-    P = float(GCP_meta_data["lat"])
+    B = float(GCP_meta_data["lat"])
     L = float(GCP_meta_data["lon"])
     H = float(GCP_meta_data["alt"])
 
@@ -91,7 +91,7 @@ def helper_function_RFM(params, frame, GCP_meta_data, Frameinfo, correction_func
 
     model = RFM(lat_off, lat_scale, long_off, long_scale, height_off, height_scale, line_off, line_scale, samp_off, samp_scale, Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
 
-    im_y, im_x = model(L, P, H)
+    im_y, im_x = model(B, L, H)
 
     error = optimization_function(col, row, im_x, im_y)
     total_error = total_error + error
@@ -255,5 +255,5 @@ if __name__ == "__main__":
 
         json.dump(realGCPsposition, open(f"../../San_francisco/own_GCPs/image_position.json", "w"), indent=2)
         # optimize_camera_parameters(method="gradient", lr=5e-9, epochs=30000, model = "PSM", correction_model=(shift_PSM, shift_initial_params_PSM, shift_flatten_PSM, shift_unflatten_PSM))
-        optimize_camera_parameters(method="gradient", lr=5e-9, epochs=30000, model = "PSM", correction_model=(linear_PSM, linear_initial_params_PSM, linear_flatten_PSM, linear_unflatten_PSM))
-        # optimize_camera_parameters(method="gradient", lr=5e-9, epochs=1, model = "RFM", correction_model=(shift_RFM, shift_initial_params_RFM, shift_flatten_RFM, shift_unflatten_RFM))
+        # optimize_camera_parameters(method="gradient", lr=5e-9, epochs=30000, model = "PSM", correction_model=(linear_PSM, linear_initial_params_PSM, linear_flatten_PSM, linear_unflatten_PSM))
+        optimize_camera_parameters(method="gradient", lr=5e-3, epochs=1000, model = "RFM", correction_model=(shift_RFM, shift_initial_params_RFM, shift_flatten_RFM, shift_unflatten_RFM))
