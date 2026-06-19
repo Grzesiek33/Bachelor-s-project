@@ -5,10 +5,10 @@ import matplotlib
 import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
-from src.optimize.correction_functions_PSM import linear_PSM, shift_PSM, rotate_PSM, quadratic_PSM
-from src.optimize.correction_functions_RFM import linear_RFM, shift_RFM, quadratic_RFM
-from src.utils.create_extrinsic import create_extrinsic
-from src.utils.RFM_model import RFM
+from src.optimize.correction_functions_PSM import *
+from src.optimize.correction_functions_RFM import *
+from src.utils.create_extrinsic import *
+from src.utils.RFM_model import *
 
 import torch
 
@@ -83,7 +83,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
     P_intrinsic = torch.tensor(FramePSMinfo["P_intrinsic"], dtype=torch.float64)
 
     if show_projected_GCPs:
-        RFM_model = RFM(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
+        RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                         FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                         FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
                         FrameRFMinfo["SAMP_SCALE"], torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64),
@@ -130,11 +130,11 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                     ("[]" if exclude is None else "e" + str(exclude)) if restricted_to is None else "r" + str(
                         restricted_to)]
 
-            params = [torch.tensor(p, dtype=torch.float64) for p in params]
+            params = torch.tensor(params, dtype=torch.float64)
 
-        line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = globals()[optimized_function+"_RFM"](params, line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs)
+        line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = globals()[optimized_function+"_RFM"](params, torch.cat([line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs]))
 
-        RFM_model = RFM(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
+        RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                         FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                         FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
                         FrameRFMinfo["SAMP_SCALE"], line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs)
@@ -164,9 +164,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
              original_exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
 
         quaternion, sat_position = globals()[optimized_function + "_PSM"](
-            [torch.tensor(p, dtype=torch.float64) for p in corrected_exterior_rotation], quaternion, sat_position)
+            torch.tensor(corrected_exterior_rotation, dtype=torch.float64), torch.cat([quaternion, sat_position]))
 
-        P_extrinsic = create_extrinsic(quaternion, sat_position)
+        P_extrinsic = create_extrinsic_torch(quaternion, sat_position)
 
         for GCP in GCPs:
 

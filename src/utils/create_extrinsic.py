@@ -3,7 +3,7 @@ import numpy as np
 import torch
 
 
-def create_extrinsic(quaternion, sat_position):
+def create_extrinsic_torch(quaternion, sat_position):
     qw, qx, qy, qz = quaternion
     sat_x, sat_y, sat_z = sat_position
 
@@ -21,5 +21,23 @@ def create_extrinsic(quaternion, sat_position):
     p2 = torch.stack([z, z, o, -sat_z])
     p3 = torch.stack([z, z, z, o])
     pos = torch.stack([p0, p1, p2, p3])
+
+    return R @ pos
+
+def create_extrinsic_numpy(quaternion, sat_position):
+    qw, qx, qy, qz = quaternion
+    sat_x, sat_y, sat_z = sat_position
+
+    r0 = np.array([1 - 2*qy*qy - 2*qz*qz, 2*qx*qy - 2*qz*qw, 2*qx*qz + 2*qy*qw, 0])
+    r1 = np.array([2*qx*qy + 2*qz*qw, 1 - 2*qx*qx - 2*qz*qz, 2*qy*qz - 2*qx*qw, 0])
+    r2 = np.array([2*qx*qz - 2*qy*qw, 2*qy*qz + 2*qx*qw, 1 - 2*qx*qx - 2*qy*qy, 0])
+    r3 = np.array([0, 0, 0, 1])
+    R = np.stack([r0, r1, r2, r3])
+
+    p0 = np.array([1, 0, 0, -sat_x])
+    p1 = np.array([0, 1, 0, -sat_y])
+    p2 = np.array([0, 0, 1, -sat_z])
+    p3 = np.array([0, 0, 0, 1])
+    pos = np.stack([p0, p1, p2, p3])
 
     return R @ pos
