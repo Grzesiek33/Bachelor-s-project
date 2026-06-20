@@ -5,16 +5,16 @@ import matplotlib
 import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
-from src.optimize.correction_functions_PSM import *
+from src.optimize.correction_functions import *
 from src.optimize.correction_functions_RFM import *
-from src.utils.create_extrinsic import *
+from src.utils.PSM_model import *
 from src.utils.RFM_model import *
 
 import torch
 
 def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,
                        corrected_by: str = "c1", optimized_function = "linear", restricted_to: list = None, exclude: list = None, control_GCPs = None,
-                       method_PSM: str = 'Nelder-Mead', method_RFM: str = 'gradient', model = "both", city="San_francisco", cities = None):
+                       method: str = 'Nelder-Mead', model = "both", city="San_francisco", cities = None):
 
     if cities is None:
         cities = ["San_francisco", "Angkor_wat", "Cocabamba"]
@@ -78,9 +78,16 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                         if realGCPsposition[ct][cam][frame]["GCPs"][GCP]["control"] == 1:
                             control_GCPs[ct] += GCP + ", "
 
-    P_projective = torch.tensor(FramePSMinfo["P_projective"], dtype=torch.float64)
-    P_camera = torch.tensor(FramePSMinfo["P_camera"], dtype=torch.float64)
-    P_intrinsic = torch.tensor(FramePSMinfo["P_intrinsic"], dtype=torch.float64)
+    if method == "gradient":
+
+        P_projective = torch.tensor(FramePSMinfo["P_projective"], dtype=torch.float64)
+        P_camera = torch.tensor(FramePSMinfo["P_camera"], dtype=torch.float64)
+        P_intrinsic = torch.tensor(FramePSMinfo["P_intrinsic"], dtype=torch.float64)
+
+    else:
+        P_projective = np.array(FramePSMinfo["P_projective"], dtype=np.float64)
+        P_camera = np.array(FramePSMinfo["P_camera"], dtype=np.float64)
+        P_intrinsic = np.array(FramePSMinfo["P_intrinsic"], dtype=np.float64)
 
     if show_projected_GCPs:
         RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
@@ -113,28 +120,44 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
     if show_optimized_GCPs:
 
-        line_num_coeffs = torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64)
-        line_den_coeffs = torch.tensor(FrameRFMinfo["LINE_DEN_COEFFS"], dtype=torch.float64)
-        samp_num_coeffs = torch.tensor(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=torch.float64)
-        samp_den_coeffs = torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64)
-
         with open(f"../../optimization/" + optimized_function + "_RFM.json", "r") as f:
             optimized_results_RFM = json.load(f)
 
             if corrected_by[0] == "c":
-                params = optimized_results_RFM[corrected_by][method_RFM][str(cities)][str(control_GCPs)][
+                params = optimized_results_RFM[corrected_by][method][str(cities)][str(control_GCPs)][
                     ("[]" if exclude is None else "e" + str(exclude)) if restricted_to is None else "r" + str(
                         restricted_to)]
             else:
-                params = optimized_results_RFM[frame_path][method_RFM][str(cities)][str(control_GCPs)][
+                params = optimized_results_RFM[frame_path][method][str(cities)][str(control_GCPs)][
                     ("[]" if exclude is None else "e" + str(exclude)) if restricted_to is None else "r" + str(
                         restricted_to)]
 
+        if method == "gradient":
             params = torch.tensor(params, dtype=torch.float64)
 
-        line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = globals()[optimized_function+"_RFM"](params, torch.cat([line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs]))
+            line_num_coeffs = torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64)
+            line_den_coeffs = torch.tensor(FrameRFMinfo["LINE_DEN_COEFFS"], dtype=torch.float64)
+            samp_num_coeffs = torch.tensor(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=torch.float64)
+            samp_den_coeffs = torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64)
+            args = torch.cat([line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs])
+        else:
+            params = np.array(params, dtype=np.float64)
+            line_num_coeffs = np.array(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=np.float64)
+            line_den_coeffs = np.array(FrameRFMinfo["LINE_DEN_COEFFS"], dtype=np.float64)
+            samp_num_coeffs = np.array(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=np.float64)
+            samp_den_coeffs = np.array(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=np.float64)
+            args = np.concat([line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs])
 
-        RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
+        line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = globals()[optimized_function+"_RFM"](params, args)
+
+        if method == "gradient":
+
+            RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
+                        FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
+                        FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
+                        FrameRFMinfo["SAMP_SCALE"], line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs)
+        else:
+            RFM_model = RFM_numpy(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                         FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                         FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
                         FrameRFMinfo["SAMP_SCALE"], line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs)
@@ -144,29 +167,48 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             optimized_results_PSM = json.load(f)
 
             if corrected_by[0] == "c":
-                corrected_exterior_rotation = optimized_results_PSM[corrected_by][method_PSM][str(cities)][str(control_GCPs)][
+                corrected_exterior_rotation = optimized_results_PSM[corrected_by][method][str(cities)][str(control_GCPs)][
                     ("[]" if exclude is None else "e" + str(exclude)) if restricted_to is None else "r" + str(
                         restricted_to)]
             else:
-                corrected_exterior_rotation = optimized_results_PSM[frame_path][method_PSM][str(cities)][str(control_GCPs)][
+                corrected_exterior_rotation = optimized_results_PSM[frame_path][method][str(cities)][str(control_GCPs)][
                     ("[]" if exclude is None else "e" + str(exclude)) if restricted_to is None else "r" + str(
                         restricted_to)]
 
         original_exterior_rotation = FramePSMinfo["exterior_orientation"]
 
-        quaternion = torch.tensor(
-            [original_exterior_rotation["qw_ecef"], original_exterior_rotation["qx_ecef"],
-             original_exterior_rotation["qy_ecef"],
-             original_exterior_rotation["qz_ecef"]], dtype=torch.float64)
+        if method == "gradient":
+            quaternion = torch.tensor(
+                [original_exterior_rotation["qw_ecef"], original_exterior_rotation["qx_ecef"],
+                 original_exterior_rotation["qy_ecef"],
+                 original_exterior_rotation["qz_ecef"]], dtype=torch.float64)
 
-        sat_position = torch.tensor(
-            [original_exterior_rotation["x_ecef_meters"], original_exterior_rotation["y_ecef_meters"],
-             original_exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
+            sat_position = torch.tensor(
+                [original_exterior_rotation["x_ecef_meters"], original_exterior_rotation["y_ecef_meters"],
+                 original_exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
 
-        quaternion, sat_position = globals()[optimized_function + "_PSM"](
-            torch.tensor(corrected_exterior_rotation, dtype=torch.float64), torch.cat([quaternion, sat_position]))
+            corrected_exterior_rotation = torch.tensor(corrected_exterior_rotation, dtype=torch.float64)
+            args = torch.cat([quaternion, sat_position])
 
-        P_extrinsic = create_extrinsic_torch(quaternion, sat_position)
+            quaternion, sat_position = globals()[optimized_function + "_PSM"](corrected_exterior_rotation, args)
+
+            P_extrinsic = create_extrinsic_torch(quaternion, sat_position)
+        else:
+            quaternion = np.array(
+                [original_exterior_rotation["qw_ecef"], original_exterior_rotation["qx_ecef"],
+                 original_exterior_rotation["qy_ecef"],
+                 original_exterior_rotation["qz_ecef"]], dtype=np.float64)
+
+            sat_position = np.array(
+                [original_exterior_rotation["x_ecef_meters"], original_exterior_rotation["y_ecef_meters"],
+                 original_exterior_rotation["z_ecef_meters"]], dtype=np.float64)
+
+            corrected_exterior_rotation = np.array(corrected_exterior_rotation, dtype=np.float64)
+            args = np.concat([quaternion, sat_position])
+
+            quaternion, sat_position = globals()[optimized_function + "_PSM"](corrected_exterior_rotation, args)
+
+            P_extrinsic = create_extrinsic_numpy(quaternion, sat_position)
 
         for GCP in GCPs:
 
@@ -179,13 +221,17 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                 L = float(meta_data["lon"])
                 H = float(meta_data["alt"])
 
-                im_space = P_camera @ P_intrinsic @ P_extrinsic @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
+                if method == "gradient":
+                    im_space = P_camera @ P_intrinsic @ P_extrinsic @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
+                else:
+                    im_space = P_camera @ P_intrinsic @ P_extrinsic @ np.array([x_ecef, y_ecef, z_ecef, 1], dtype=np.float64)
                 im_x = im_space[0] / im_space[2]
                 im_y = im_space[1] / im_space[2]
                 if model == "both" or model == "PSM":
                     plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="o", label=f"{GCP} (corrected position PSM)", s=100)
 
                 im_y, im_x = RFM_model(B, L, H)
+
                 if model == "both" or model == "RFM":
                     plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="*", label=f"{GCP} (corrected position RFM)", s=100)
 
@@ -204,7 +250,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
     plt.tight_layout()
     plt.subplots_adjust(right=0.7)
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=20)
-    plt.title(f"corrected on {corrected_by} using {optimized_function} function with {method_PSM} and {method_RFM} method"+(f" restricted to {restricted_to}" if restricted_to is not None else "")+(f" excluding {exclude}" if exclude is not None else ""), fontsize=20)
+    plt.title(f"corrected on {corrected_by} using {optimized_function} function with {method} method"+(f" restricted to {restricted_to}" if restricted_to is not None else "")+(f" excluding {exclude}" if exclude is not None else ""), fontsize=20)
     plt.show()
 
 if __name__ == "__main__":
@@ -214,8 +260,8 @@ if __name__ == "__main__":
     # show_GCPs_on_frame("1293562079.26564479_sc00113_c1_PAN_i0000000150", method_PSM="gradient", optimized_function="shift")
 
 
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="shift", show_real_GCPs=False, show_projected_GCPs=False)
-    # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="linear")
+    # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", show_real_GCPs=False, show_projected_GCPs=False)
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method="gradient", optimized_function="linear")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="quadratic")
 
     # show_GCPs_on_frame("1293562079.69835258_sc00113_c1_PAN_i0000000170", method_PSM="gradient", optimized_function="quadratic")

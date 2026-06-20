@@ -3,162 +3,15 @@ import os
 from scipy.optimize import minimize
 import json
 
-from src.utils.create_extrinsic import *
-from correction_functions_PSM import *
+from src.utils.PSM_model import *
+from correction_functions import *
 from optimization_function import MSE
-from correction_functions_RFM import *
 import re
 import torch
 import numpy as np
 from src.utils.RFM_model import *
 
-def helper_function_PSM(params, frame, GCP_meta_data, Frameinfo, correction_function=linear_PSM, optimization_function=MSE, q_constraint : float = 1):
-
-    P_camera = torch.tensor(Frameinfo["P_camera"], dtype=torch.float64)
-    P_intrinsic = torch.tensor(Frameinfo["P_intrinsic"], dtype=torch.float64)
-
-    exterior_rotation = Frameinfo["exterior_orientation"]
-
-    quaternion = torch.tensor([exterior_rotation["qw_ecef"], exterior_rotation["qx_ecef"], exterior_rotation["qy_ecef"],
-                           exterior_rotation["qz_ecef"]], dtype=torch.float64)
-
-    sat_position = torch.tensor(
-        [exterior_rotation["x_ecef_meters"], exterior_rotation["y_ecef_meters"], exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
-
-    q, sat_pos = correction_function(params, torch.cat([quaternion, sat_position]))
-
-    P_extrinsic = create_extrinsic_torch(q, sat_pos)
-
-    x_ecef = float(GCP_meta_data["x_ecef"])
-    y_ecef = float(GCP_meta_data["y_ecef"])
-    z_ecef = float(GCP_meta_data["z_ecef"])
-
-    row = frame["row"]
-    col = frame["col"]
-
-    total_error = torch.tensor(0, dtype=torch.float64)
-
-    im_space = P_camera @ P_intrinsic @ P_extrinsic @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
-    im_x = im_space[0] / im_space[2]
-    im_y = im_space[1] / im_space[2]
-
-    total_error = total_error + optimization_function(col, row, im_x, im_y)
-    total_error = total_error + q_constraint * ((1 - ( q[0]**2 + q[1]**2 + q[2]**2 + q[3]**2 )) ** 2)
-
-    return total_error
-
-def helper_function_numpy(params, frame, GCP_meta_data, Frameinfo, correction_function=linear_PSM, optimization_function=MSE, q_constraint : float = 1):
-
-    P_camera = np.array(Frameinfo["P_camera"], dtype=np.float64)
-    P_intrinsic = np.array(Frameinfo["P_intrinsic"], dtype=np.float64)
-
-    exterior_rotation = Frameinfo["exterior_orientation"]
-
-    quaternion = np.array([exterior_rotation["qw_ecef"], exterior_rotation["qx_ecef"], exterior_rotation["qy_ecef"],
-                           exterior_rotation["qz_ecef"]], dtype=np.float64)
-
-    sat_position = np.array(
-        [exterior_rotation["x_ecef_meters"], exterior_rotation["y_ecef_meters"], exterior_rotation["z_ecef_meters"]], dtype=np.float64)
-
-    q, sat_pos = correction_function(params, numpy.concat([quaternion, sat_position]))
-
-    P_extrinsic = create_extrinsic_numpy(q, sat_pos)
-
-    x_ecef = float(GCP_meta_data["x_ecef"])
-    y_ecef = float(GCP_meta_data["y_ecef"])
-    z_ecef = float(GCP_meta_data["z_ecef"])
-
-    row = frame["row"]
-    col = frame["col"]
-
-    total_error = 0.0
-
-    im_space = P_camera @ P_intrinsic @ P_extrinsic @ np.array([x_ecef, y_ecef, z_ecef, 1], dtype=np.float64)
-    im_x = im_space[0] / im_space[2]
-    im_y = im_space[1] / im_space[2]
-
-    total_error = total_error + optimization_function(col, row, im_x, im_y)
-    total_error = total_error + q_constraint * ((1 - ( q[0]**2 + q[1]**2 + q[2]**2 + q[3]**2 )) ** 2)
-
-    return total_error
-
-def helper_function_RFM(params, frame, GCP_meta_data, Frameinfo, correction_function=linear_RFM, optimization_function=MSE):
-
-    Line_num_coeffs = torch.tensor(Frameinfo[f"LINE_NUM_COEFFS"], dtype=torch.float64)
-    Line_den_coeffs = torch.tensor(Frameinfo[f"LINE_DEN_COEFFS"], dtype=torch.float64)
-    Samp_num_coeffs = torch.tensor(Frameinfo[f"SAMP_NUM_COEFFS"], dtype=torch.float64)
-    Samp_den_coeffs = torch.tensor(Frameinfo[f"SAMP_DEN_COEFFS"], dtype=torch.float64)
-
-    line_off = Frameinfo["LINE_OFF"]
-    samp_off = Frameinfo["SAMP_OFF"]
-    lat_off = Frameinfo["LAT_OFF"]
-    long_off = Frameinfo["LONG_OFF"]
-    height_off = Frameinfo["HEIGHT_OFF"]
-    line_scale = Frameinfo["LINE_SCALE"]
-    samp_scale = Frameinfo["SAMP_SCALE"]
-    lat_scale = Frameinfo["LAT_SCALE"]
-    long_scale = Frameinfo["LONG_SCALE"]
-    height_scale = Frameinfo["HEIGHT_SCALE"]
-
-    Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs = correction_function(params, torch.cat([Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs]))
-
-    B = float(GCP_meta_data["lat"])
-    L = float(GCP_meta_data["lon"])
-    H = float(GCP_meta_data["alt"])
-
-    row = frame["row"]
-    col = frame["col"]
-
-    total_error = torch.tensor(0, dtype=torch.float64)
-
-    model = RFM_torch(lat_off, lat_scale, long_off, long_scale, height_off, height_scale, line_off, line_scale, samp_off, samp_scale, Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
-
-    im_y, im_x = model(B, L, H)
-
-    error = optimization_function(col, row, im_x, im_y)
-    total_error = total_error + error
-
-    return total_error
-
-def helper_function_RFM_numpy(params, frame, GCP_meta_data, Frameinfo, correction_function=linear_RFM, optimization_function=MSE):
-
-    Line_num_coeffs = np.array(Frameinfo[f"LINE_NUM_COEFFS"], dtype=np.float64)
-    Line_den_coeffs = np.array(Frameinfo[f"LINE_DEN_COEFFS"], dtype=np.float64)
-    Samp_num_coeffs = np.array(Frameinfo[f"SAMP_NUM_COEFFS"], dtype=np.float64)
-    Samp_den_coeffs = np.array(Frameinfo[f"SAMP_DEN_COEFFS"], dtype=np.float64)
-
-    line_off = Frameinfo["LINE_OFF"]
-    samp_off = Frameinfo["SAMP_OFF"]
-    lat_off = Frameinfo["LAT_OFF"]
-    long_off = Frameinfo["LONG_OFF"]
-    height_off = Frameinfo["HEIGHT_OFF"]
-    line_scale = Frameinfo["LINE_SCALE"]
-    samp_scale = Frameinfo["SAMP_SCALE"]
-    lat_scale = Frameinfo["LAT_SCALE"]
-    long_scale = Frameinfo["LONG_SCALE"]
-    height_scale = Frameinfo["HEIGHT_SCALE"]
-
-    Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs = correction_function(params, numpy.concat([Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs]))
-
-    B = float(GCP_meta_data["lat"])
-    L = float(GCP_meta_data["lon"])
-    H = float(GCP_meta_data["alt"])
-
-    row = frame["row"]
-    col = frame["col"]
-
-    total_error = 0
-
-    model = RFM_numpy(lat_off, lat_scale, long_off, long_scale, height_off, height_scale, line_off, line_scale, samp_off, samp_scale, Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
-
-    im_y, im_x = model(B, L, H)
-
-    error = optimization_function(col, row, im_x, im_y)
-    total_error = total_error + error
-
-    return total_error
-
-def optimize_camera_parameters(correction_model = (linear_PSM, linear_initial_params_PSM),
+def optimize_camera_parameters(correction_model = (linear, linear_initial_params_PSM),
                                correction_for: str = "c1", restricted_to: list = None, exclude: list = None, method: str = 'Nelder-Mead',
                                lr=1e-5, epochs=1000, optimization_function=MSE, q_constraint : float = 1, model ="PSM", cities=None):
     if cities is None:
@@ -166,6 +19,7 @@ def optimize_camera_parameters(correction_model = (linear_PSM, linear_initial_pa
 
     GCPinfo = {}
     realGCPsposition = {}
+    frameInfo = {}
 
     for city in cities:
         with open(f"../../{city}/own_GCPs/GCPs.json", "r") as f:
@@ -173,6 +27,9 @@ def optimize_camera_parameters(correction_model = (linear_PSM, linear_initial_pa
 
         with open(f"../../{city}/own_GCPs/image_position.json", "r") as f:
             realGCPsposition[city] = json.load(f)
+
+        with open(f"../../{city}/frameRPC.json", "r") as f:
+            frameInfo[city] = json.load(f)
 
     control_GCPs = {}
 
@@ -191,34 +48,101 @@ def optimize_camera_parameters(correction_model = (linear_PSM, linear_initial_pa
 
                 def objective_function(params):
                     total_error = torch.tensor(0, dtype=torch.float64)
-                    for city in cities:
-                        for frame in realGCPsposition[city][correction_for]:
-                            with open(f"../../{city}/l1a_frames/" + frame + "_pinhole.json", "r") as f:
+                    for ct in cities:
+                        for fr in realGCPsposition[ct][correction_for]:
+                            with open(f"../../{ct}/l1a_frames/" + fr + "_pinhole.json", "r") as f:
                                 Frameinfo = json.load(f)
 
-                            for GCP in realGCPsposition[city][correction_for][frame]["GCPs"]:
-                                if realGCPsposition[city][correction_for][frame]["GCPs"][GCP]["control"] == 0 and (restricted_to is None or GCP in restricted_to) and (exclude is None or GCP not in exclude):
-                                    total_error = total_error + helper_function_PSM(params, realGCPsposition[city][correction_for][frame]["GCPs"][GCP], GCPinfo[city][GCP], Frameinfo, correction_function=correction_model[0], optimization_function=optimization_function, q_constraint=q_constraint)
+                            P_camera = torch.tensor(Frameinfo["P_camera"], dtype=torch.float64)
+                            P_intrinsic = torch.tensor(Frameinfo["P_intrinsic"], dtype=torch.float64)
+
+                            exterior_rotation = Frameinfo["exterior_orientation"]
+
+                            quaternion = torch.tensor(
+                                [exterior_rotation["qw_ecef"], exterior_rotation["qx_ecef"],
+                                 exterior_rotation["qy_ecef"],
+                                 exterior_rotation["qz_ecef"]], dtype=torch.float64)
+
+                            sat_position = torch.tensor(
+                                [exterior_rotation["x_ecef_meters"], exterior_rotation["y_ecef_meters"],
+                                 exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
+
+                            correction_function = correction_model[0](torch.cat([quaternion, sat_position]), no_parameters=7,
+                                                         numpy=False, linear_constraint=1e-4)
+
+                            corrected_parameters = correction_function(params)
+
+                            q, sat_pos = corrected_parameters[:4], corrected_parameters[4:]
+
+                            model = PSM_torch(P_camera, P_intrinsic, quaternion, sat_position)
+
+                            for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
+                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0 and (restricted_to is None or GCP in restricted_to) and (exclude is None or GCP not in exclude):
+
+                                    x_ecef = float(GCPinfo[ct][GCP]["x_ecef"])
+                                    y_ecef = float(GCPinfo[ct][GCP]["y_ecef"])
+                                    z_ecef = float(GCPinfo[ct][GCP]["z_ecef"])
+
+
+                                    im_x, im_y = model(x_ecef, y_ecef, z_ecef)
+
+                                    row = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["row"]
+                                    col = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["col"]
+
+                                    total_error = total_error + optimization_function(col, row, im_x, im_y) + q_constraint * ((1 - ( q[0]**2 + q[1]**2 + q[2]**2 + q[3]**2 )) ** 2)
+
                     return total_error
 
             else:
                 def objective_function(params):
                     total_error = 0
-                    for city in cities:
-                        for frame in realGCPsposition[city][correction_for]:
-                            with open(f"../../{city}/l1a_frames/" + frame + "_pinhole.json", "r") as f:
+                    for ct in cities:
+                        for fr in realGCPsposition[ct][correction_for]:
+                            with open(f"../../{ct}/l1a_frames/" + fr + "_pinhole.json", "r") as f:
                                 Frameinfo = json.load(f)
 
-                            for GCP in realGCPsposition[city][correction_for][frame]["GCPs"]:
-                                if realGCPsposition[city][correction_for][frame]["GCPs"][GCP]["control"] == 0 and (
+                            P_camera = np.array(Frameinfo["P_camera"], dtype=np.float64)
+                            P_intrinsic = np.array(Frameinfo["P_intrinsic"], dtype=np.float64)
+
+                            exterior_rotation = Frameinfo["exterior_orientation"]
+
+                            quaternion = np.array(
+                                [exterior_rotation["qw_ecef"], exterior_rotation["qx_ecef"],
+                                 exterior_rotation["qy_ecef"],
+                                 exterior_rotation["qz_ecef"]], dtype=np.float64)
+
+                            sat_position = np.array(
+                                [exterior_rotation["x_ecef_meters"], exterior_rotation["y_ecef_meters"],
+                                 exterior_rotation["z_ecef_meters"]], dtype=np.float64)
+
+                            correction_function = correction_model[0](np.concat([quaternion, sat_position]),
+                                                                      no_parameters=7,
+                                                                      numpy=True, linear_constraint=1e-4)
+
+                            corrected_parameters = correction_function(params)
+
+                            q, sat_pos = corrected_parameters[:4], corrected_parameters[4:]
+
+                            model = PSM_numpy(P_camera, P_intrinsic, quaternion, sat_position)
+
+                            for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
+                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0 and (
                                         restricted_to is None or GCP in restricted_to) and (
                                         exclude is None or GCP not in exclude):
-                                    total_error = total_error + helper_function_numpy(params, realGCPsposition[city][
-                                        correction_for][frame]["GCPs"][GCP], GCPinfo[city][GCP], Frameinfo,
-                                                                                    correction_function=
-                                                                                    correction_model[0],
-                                                                                    optimization_function=optimization_function,
-                                                                                    q_constraint=q_constraint)
+
+                                    x_ecef = float(GCPinfo[ct][GCP]["x_ecef"])
+                                    y_ecef = float(GCPinfo[ct][GCP]["y_ecef"])
+                                    z_ecef = float(GCPinfo[ct][GCP]["z_ecef"])
+
+                                    im_x, im_y = model(x_ecef, y_ecef, z_ecef)
+
+                                    row = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["row"]
+                                    col = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["col"]
+
+                                    total_error = total_error + optimization_function(col, row, im_x,
+                                                                                      im_y) + q_constraint * ((1 - (
+                                                q[0] ** 2 + q[1] ** 2 + q[2] ** 2 + q[3] ** 2)) ** 2)
+
                     return total_error
 
         elif model == "RFM":
@@ -226,68 +150,135 @@ def optimize_camera_parameters(correction_model = (linear_PSM, linear_initial_pa
             if method == "gradient":
 
                 def objective_function(params):
+                    total_error = 0
+                    for ct in cities:
+                        for fr in realGCPsposition[ct][correction_for]:
+                            Line_num_coeffs = torch.tensor(frameInfo[ct][fr][f"LINE_NUM_COEFFS"], dtype=torch.float64)
+                            Line_den_coeffs = torch.tensor(frameInfo[ct][fr][f"LINE_DEN_COEFFS"], dtype=torch.float64)
+                            Samp_num_coeffs = torch.tensor(frameInfo[ct][fr][f"SAMP_NUM_COEFFS"], dtype=torch.float64)
+                            Samp_den_coeffs = torch.tensor(frameInfo[ct][fr][f"SAMP_DEN_COEFFS"], dtype=torch.float64)
 
-                    total_error = torch.tensor(0, dtype=torch.float64)
-                    for city in cities:
-                        with open(f"../../{city}/frameRPC.json", "r") as f:
-                            Frame = json.load(f)
+                            line_off = frameInfo[ct][fr]["LINE_OFF"]
+                            samp_off = frameInfo[ct][fr]["SAMP_OFF"]
+                            lat_off = frameInfo[ct][fr]["LAT_OFF"]
+                            long_off = frameInfo[ct][fr]["LONG_OFF"]
+                            height_off = frameInfo[ct][fr]["HEIGHT_OFF"]
+                            line_scale = frameInfo[ct][fr]["LINE_SCALE"]
+                            samp_scale = frameInfo[ct][fr]["SAMP_SCALE"]
+                            lat_scale = frameInfo[ct][fr]["LAT_SCALE"]
+                            long_scale = frameInfo[ct][fr]["LONG_SCALE"]
+                            height_scale = frameInfo[ct][fr]["HEIGHT_SCALE"]
 
-                        for frame in realGCPsposition[city][correction_for]:
-                            Frameinfo = Frame[frame]
+                            correction_function = correction_model[0](
+                                torch.cat([Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs]),
+                                no_parameters=80,
+                                numpy=False)
 
-                            for GCP in realGCPsposition[city][correction_for][frame]["GCPs"]:
-                                if realGCPsposition[city][correction_for][frame]["GCPs"][GCP]["control"] == 0 and (restricted_to is None or GCP in restricted_to) and (exclude is None or GCP not in exclude):
-                                    total_error = total_error + helper_function_RFM(params, realGCPsposition[city][correction_for][frame]["GCPs"][GCP], GCPinfo[city][GCP], Frameinfo, correction_function=correction_model[0], optimization_function=optimization_function)
+                            corrected_parameters = correction_function(params)
+
+                            Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs = torch.split(corrected_parameters, [20, 20, 20, 20])
+
+                            model = RFM_torch(lat_off, lat_scale, long_off, long_scale, height_off, height_scale,
+                                              line_off, line_scale, samp_off, samp_scale, Line_num_coeffs,
+                                              Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
+
+                            for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
+                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0 and (
+                                        restricted_to is None or GCP in restricted_to) and (
+                                        exclude is None or GCP not in exclude):
+                                    B = float(GCPinfo[ct][GCP]["lat"])
+                                    L = float(GCPinfo[ct][GCP]["lon"])
+                                    H = float(GCPinfo[ct][GCP]["alt"])
+
+                                    row = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["row"]
+                                    col = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["col"]
+
+                                    im_y, im_x = model(B, L, H)
+
+                                    total_error = total_error + optimization_function(col, row, im_x, im_y)
+
                     return total_error
 
             else:
                 def objective_function(params):
-
                     total_error = 0
-                    for city in cities:
-                        with open(f"../../{city}/frameRPC.json", "r") as f:
-                            Frame = json.load(f)
+                    for ct in cities:
+                        for fr in realGCPsposition[ct][correction_for]:
 
-                        for frame in realGCPsposition[city][correction_for]:
-                            Frameinfo = Frame[frame]
+                            Line_num_coeffs = np.array(frameInfo[ct][fr][f"LINE_NUM_COEFFS"], dtype=np.float64)
+                            Line_den_coeffs = np.array(frameInfo[ct][fr][f"LINE_DEN_COEFFS"], dtype=np.float64)
+                            Samp_num_coeffs = np.array(frameInfo[ct][fr][f"SAMP_NUM_COEFFS"], dtype=np.float64)
+                            Samp_den_coeffs = np.array(frameInfo[ct][fr][f"SAMP_DEN_COEFFS"], dtype=np.float64)
 
-                            for GCP in realGCPsposition[city][correction_for][frame]["GCPs"]:
-                                if realGCPsposition[city][correction_for][frame]["GCPs"][GCP]["control"] == 0 and (
+                            line_off = frameInfo[ct][fr]["LINE_OFF"]
+                            samp_off = frameInfo[ct][fr]["SAMP_OFF"]
+                            lat_off = frameInfo[ct][fr]["LAT_OFF"]
+                            long_off = frameInfo[ct][fr]["LONG_OFF"]
+                            height_off = frameInfo[ct][fr]["HEIGHT_OFF"]
+                            line_scale = frameInfo[ct][fr]["LINE_SCALE"]
+                            samp_scale = frameInfo[ct][fr]["SAMP_SCALE"]
+                            lat_scale = frameInfo[ct][fr]["LAT_SCALE"]
+                            long_scale = frameInfo[ct][fr]["LONG_SCALE"]
+                            height_scale = frameInfo[ct][fr]["HEIGHT_SCALE"]
+
+                            correction_function = correction_model[0](
+                                np.concat([Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs]),
+                                no_parameters=80,
+                                numpy=True)
+
+                            corrected_parameters = correction_function(params)
+
+                            Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs = corrected_parameters.reshape(4, 20)
+
+                            model = RFM_numpy(lat_off, lat_scale, long_off, long_scale, height_off, height_scale,
+                                              line_off, line_scale, samp_off, samp_scale, Line_num_coeffs,
+                                              Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
+
+                            for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
+                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0 and (
                                         restricted_to is None or GCP in restricted_to) and (
                                         exclude is None or GCP not in exclude):
-                                    total_error = total_error + helper_function_RFM_numpy(params, realGCPsposition[city][
-                                        correction_for][frame]["GCPs"][GCP], GCPinfo[city][GCP], Frameinfo,
-                                                                                    correction_function=correction_model[0],
-                                                                                    optimization_function=optimization_function)
+                                    B = float(GCPinfo[ct][GCP]["lat"])
+                                    L = float(GCPinfo[ct][GCP]["lon"])
+                                    H = float(GCPinfo[ct][GCP]["alt"])
+
+                                    row = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["row"]
+                                    col = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["col"]
+
+                                    im_y, im_x = model(B, L, H)
+
+                                    total_error = total_error + optimization_function(col, row, im_x, im_y)
+
                     return total_error
         else:
             raise ValueError(f"model {model} not implemented")
 
-    elif "." in correction_for:
-        if model == "PSM":
-            def objective_function(params):
-                total_error = torch.tensor(0, dtype=torch.float64)
-                with open(f"../../{city}/l1a_frames/" + correction_for + "_pinhole.json", "r") as f:
-                    Frameinfo = json.load(f)
-
-                cam = re.search(r"c[1,2,3]", correction_for).group(0)
-
-                for GCP in realGCPsposition[city][cam][correction_for]["GCPs"]:
-                    if realGCPsposition[city][cam][correction_for]["GCPs"][GCP]["control"] == 0 and (restricted_to is None or GCP in restricted_to) and (exclude is None or GCP not in exclude):
-                        total_error = total_error + helper_function_PSM(params, realGCPsposition[city][cam][correction_for]["GCPs"][GCP], GCPinfo[city][GCP], Frameinfo, correction_function=correction_model[0], optimization_function=optimization_function, q_constraint=q_constraint, unflatten=correction_model[3], nump=(method!="gradient"))
-                return total_error
-        elif model == "RFM":
-            def objective_function(params):
-                total_error = torch.tensor(0, dtype=torch.float64)
-                with open(f"../../{city}/frameRPC.json", "r") as f:
-                    Frameinfo = json.load(f)[correction_for]
-
-                cam = re.search(r"c[1,2,3]", correction_for).group(0)
-
-                for GCP in realGCPsposition[city][cam][correction_for]["GCPs"]:
-                    if realGCPsposition[city][cam][correction_for]["GCPs"][GCP]["control"] == 0 and (restricted_to is None or GCP in restricted_to) and (exclude is None or GCP not in exclude):
-                        total_error = total_error + helper_function_RFM(params, realGCPsposition[city][cam][correction_for]["GCPs"][GCP], GCPinfo[city][GCP], Frameinfo, correction_function=correction_model[0], optimization_function=optimization_function, unflatten=correction_model[3], nump=(method!="gradient"))
-                return total_error
+    ### TODO: implement for single frame
+    # elif "." in correction_for:
+    #     if model == "PSM":
+    #         def objective_function(params):
+    #             total_error = torch.tensor(0, dtype=torch.float64)
+    #             with open(f"../../{city}/l1a_frames/" + correction_for + "_pinhole.json", "r") as f:
+    #                 Frameinfo = json.load(f)
+    #
+    #             cam = re.search(r"c[1,2,3]", correction_for).group(0)
+    #
+    #             for GCP in realGCPsposition[city][cam][correction_for]["GCPs"]:
+    #                 if realGCPsposition[city][cam][correction_for]["GCPs"][GCP]["control"] == 0 and (restricted_to is None or GCP in restricted_to) and (exclude is None or GCP not in exclude):
+    #                     total_error = total_error + helper_function_PSM(params, realGCPsposition[city][cam][correction_for]["GCPs"][GCP], GCPinfo[city][GCP], Frameinfo, correction_function=correction_model[0], optimization_function=optimization_function, q_constraint=q_constraint, unflatten=correction_model[3], nump=(method!="gradient"))
+    #             return total_error
+    #     elif model == "RFM":
+    #         def objective_function(params):
+    #             total_error = torch.tensor(0, dtype=torch.float64)
+    #             with open(f"../../{city}/frameRPC.json", "r") as f:
+    #                 Frameinfo = json.load(f)[correction_for]
+    #
+    #             cam = re.search(r"c[1,2,3]", correction_for).group(0)
+    #
+    #             for GCP in realGCPsposition[city][cam][correction_for]["GCPs"]:
+    #                 if realGCPsposition[city][cam][correction_for]["GCPs"][GCP]["control"] == 0 and (restricted_to is None or GCP in restricted_to) and (exclude is None or GCP not in exclude):
+    #                     total_error = total_error + helper_function_RFM(params, realGCPsposition[city][cam][correction_for]["GCPs"][GCP], GCPinfo[city][GCP], Frameinfo, correction_function=correction_model[0], optimization_function=optimization_function, unflatten=correction_model[3], nump=(method!="gradient"))
+    #             return total_error
 
     else:
         raise ValueError(f"correction for {correction_for} not implemented")
@@ -332,21 +323,27 @@ def optimize_camera_parameters(correction_model = (linear_PSM, linear_initial_pa
     with open("../../optimization/" + correction_model[0].__name__ + ".json", "w") as f:
      json.dump(optimized_results, f, indent=2)
 
+    print("Optimization completed")
+
 
 if __name__ == "__main__":
 
     # only one GCP San Francisco
 
-    # optimize_camera_parameters(method="gradient", lr=5e-4, epochs=1000, model = "RFM", correction_model=(shift_RFM, shift_initial_params_RFM))
-    optimize_camera_parameters(method="gradient", lr=1e-5, epochs=1000, model = "PSM", correction_model=(shift_PSM, shift_initial_params_PSM))
-    # optimize_camera_parameters(model = "RFM", correction_model=(shift_RFM, shift_initial_params_RFM))
-    # optimize_camera_parameters(model = "PSM", correction_model=(shift_PSM, shift_initial_params_PSM))
+    optimize_camera_parameters(method="gradient", lr=5e-3, epochs=100, model = "RFM", correction_model=(shift, shift_initial_params_RFM))
+    optimize_camera_parameters(method="gradient", lr=1e-4, epochs=100, model = "PSM", correction_model=(shift, shift_initial_params_PSM))
+    optimize_camera_parameters(epochs=100, model = "RFM", correction_model=(shift, shift_initial_params_RFM))
+    optimize_camera_parameters(model = "PSM", correction_model=(shift, shift_initial_params_PSM))
 
-    # optimize_camera_parameters(method="gradient", lr=5e-5, epochs=3000, model = "RFM", correction_model=(linear_RFM, linear_initial_params_RFM, linear_flatten_RFM, linear_unflatten_RFM))
-    # optimize_camera_parameters(method="gradient", lr=1e-11, epochs=10000, model = "PSM", correction_model=(linear_PSM, linear_initial_params_PSM, linear_flatten_PSM, linear_unflatten_PSM))
+    # optimize_camera_parameters(method="gradient", lr=5e-5, epochs=1000, model = "RFM", correction_model=(linear_RFM, linear_initial_params_RFM))
+    # optimize_camera_parameters(method="gradient", lr=1e-11, epochs=1000, model = "PSM", correction_model=(linear_PSM, linear_initial_params_PSM))
+    # optimize_camera_parameters(model = "RFM", correction_model=(linear_RFM_numpy, linear_initial_params_RFM))
+    # optimize_camera_parameters(model = "PSM", correction_model=(linear_PSM_numpy, linear_initial_params_PSM))
 
-    # optimize_camera_parameters(method="gradient", lr=5e-5, epochs=3000, model = "RFM", correction_model=(quadratic_RFM, quadratic_initial_params_RFM, quadratic_flatten_RFM, quadratic_unflatten_RFM))
-    # optimize_camera_parameters(method="gradient", lr=1e-12, epochs=60000, model = "PSM", correction_model=(quadratic_PSM, quadratic_initial_params_PSM, quadratic_flatten_PSM, quadratic_unflatten_PSM))
+    # optimize_camera_parameters(method="gradient", lr=5e-5, model = "RFM", correction_model=(quadratic_RFM_torch, quadratic_initial_params_RFM))
+    # optimize_camera_parameters(method="gradient", lr=1e-12, model = "PSM", correction_model=(quadratic_PSM_torch, quadratic_initial_params_PSM))
+    # optimize_camera_parameters(model = "RFM", correction_model=(quadratic_RFM_numpy, quadratic_initial_params_RFM))
+    # optimize_camera_parameters(model = "PSM", correction_model=(quadratic_PSM_numpy, quadratic_initial_params_PSM))
 
 
     # with open(f"../../San_francisco/own_GCPs/image_position.json", "r") as f:

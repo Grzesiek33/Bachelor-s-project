@@ -2,13 +2,29 @@ import json
 import numpy as np
 import torch
 
+def PSM_torch(P_camera, P_intrinsic, quaternion, sat_position):
+    def model(x_ecef, y_ecef, z_ecef):
+        P_extrinsic = create_extrinsic_torch(quaternion, sat_position)
+        im_space = P_camera @ P_intrinsic @ P_extrinsic @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
+        return im_space[0] / im_space[2], im_space[1] / im_space[2]
+
+    return model
+
+
+def PSM_numpy(P_camera, P_intrinsic, quaternion, sat_position):
+    def model(x_ecef, y_ecef, z_ecef):
+        P_extrinsic = create_extrinsic_numpy(quaternion, sat_position)
+        im_space = P_camera @ P_intrinsic @ P_extrinsic @ np.array([x_ecef, y_ecef, z_ecef, 1], dtype=np.float64)
+        return im_space[0] / im_space[2], im_space[1] / im_space[2]
+
+    return model
 
 def create_extrinsic_torch(quaternion, sat_position):
     qw, qx, qy, qz = quaternion
     sat_x, sat_y, sat_z = sat_position
 
-    z = torch.zeros_like(qw)
-    o = torch.ones_like(qw)
+    z = torch.zeros_like(qw, dtype=torch.float64)
+    o = torch.ones_like(qw, dtype=torch.float64)
 
     r0 = torch.stack([1 - 2*qy*qy - 2*qz*qz, 2*qx*qy - 2*qz*qw, 2*qx*qz + 2*qy*qw, z])
     r1 = torch.stack([2*qx*qy + 2*qz*qw, 1 - 2*qx*qx - 2*qz*qz, 2*qy*qz - 2*qx*qw, z])

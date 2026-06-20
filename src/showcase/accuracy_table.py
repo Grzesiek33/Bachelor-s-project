@@ -7,9 +7,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sympy import latex
 
-from src.optimize.correction_functions_PSM import linear_PSM, shift_PSM, rotate_PSM, quadratic_PSM
+from src.optimize.correction_functions import linear_PSM, shift_PSM, rotate_PSM, quadratic_PSM
 from src.optimize.correction_functions_RFM import linear_RFM, shift_RFM, quadratic_RFM
-from src.utils.create_extrinsic import create_extrinsic
+from src.utils.PSM_model import create_extrinsic
 from src.utils.RFM_model import RFM
 
 import torch
