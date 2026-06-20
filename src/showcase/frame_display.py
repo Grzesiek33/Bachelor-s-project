@@ -6,7 +6,6 @@ import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
 from src.optimize.correction_functions import *
-from src.optimize.correction_functions_RFM import *
 from src.utils.PSM_model import *
 from src.utils.RFM_model import *
 
@@ -78,14 +77,14 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                         if realGCPsposition[ct][cam][frame]["GCPs"][GCP]["control"] == 1:
                             control_GCPs[ct] += GCP + ", "
 
+    P_projective = torch.tensor(FramePSMinfo["P_projective"], dtype=torch.float64)
+
     if method == "gradient":
 
-        P_projective = torch.tensor(FramePSMinfo["P_projective"], dtype=torch.float64)
         P_camera = torch.tensor(FramePSMinfo["P_camera"], dtype=torch.float64)
         P_intrinsic = torch.tensor(FramePSMinfo["P_intrinsic"], dtype=torch.float64)
 
     else:
-        P_projective = np.array(FramePSMinfo["P_projective"], dtype=np.float64)
         P_camera = np.array(FramePSMinfo["P_camera"], dtype=np.float64)
         P_intrinsic = np.array(FramePSMinfo["P_intrinsic"], dtype=np.float64)
 
@@ -140,6 +139,11 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             samp_num_coeffs = torch.tensor(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=torch.float64)
             samp_den_coeffs = torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64)
             args = torch.cat([line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs])
+
+            correction_function_RFM = globals()[optimized_function](args, no_parameters=80, numpy=False, linear_constraint=1)
+
+            line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = torch.split(correction_function_RFM(params), [20, 20, 20, 20])
+
         else:
             params = np.array(params, dtype=np.float64)
             line_num_coeffs = np.array(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=np.float64)
@@ -148,7 +152,12 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             samp_den_coeffs = np.array(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=np.float64)
             args = np.concat([line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs])
 
-        line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = globals()[optimized_function+"_RFM"](params, args)
+            correction_function_RFM = globals()[optimized_function](args, no_parameters=80, numpy=True,
+                                                                    linear_constraint=1)
+
+            corrected_parameters = correction_function_RFM(params)
+
+            line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = np.split(corrected_parameters, [20, 40, 60])
 
         if method == "gradient":
 
@@ -188,9 +197,13 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                  original_exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
 
             corrected_exterior_rotation = torch.tensor(corrected_exterior_rotation, dtype=torch.float64)
-            args = torch.cat([quaternion, sat_position])
 
-            quaternion, sat_position = globals()[optimized_function + "_PSM"](corrected_exterior_rotation, args)
+            correction_function = globals()[optimized_function](torch.cat([quaternion, sat_position]), no_parameters=7,
+                                                                numpy=False, linear_constraint=1e-4)
+
+            corrected_parameters = correction_function(corrected_exterior_rotation)
+
+            quaternion, sat_position = torch.split(corrected_parameters, [4, 3])
 
             P_extrinsic = create_extrinsic_torch(quaternion, sat_position)
         else:
@@ -204,9 +217,13 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                  original_exterior_rotation["z_ecef_meters"]], dtype=np.float64)
 
             corrected_exterior_rotation = np.array(corrected_exterior_rotation, dtype=np.float64)
-            args = np.concat([quaternion, sat_position])
 
-            quaternion, sat_position = globals()[optimized_function + "_PSM"](corrected_exterior_rotation, args)
+            correction_function = globals()[optimized_function](np.concat([quaternion, sat_position]), no_parameters=7,
+                                                                numpy=True, linear_constraint=1e-4)
+
+            corrected_parameters = correction_function(corrected_exterior_rotation)
+
+            quaternion, sat_position = np.split(corrected_parameters, [4])
 
             P_extrinsic = create_extrinsic_numpy(quaternion, sat_position)
 
@@ -260,8 +277,8 @@ if __name__ == "__main__":
     # show_GCPs_on_frame("1293562079.26564479_sc00113_c1_PAN_i0000000150", method_PSM="gradient", optimized_function="shift")
 
 
-    # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", show_real_GCPs=False, show_projected_GCPs=False)
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method="gradient", optimized_function="linear")
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", show_real_GCPs=True, show_projected_GCPs=True)
+    # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method="gradient", optimized_function="linear")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="quadratic")
 
     # show_GCPs_on_frame("1293562079.69835258_sc00113_c1_PAN_i0000000170", method_PSM="gradient", optimized_function="quadratic")
