@@ -12,7 +12,7 @@ from src.utils.RFM_model import *
 import torch
 
 def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,
-                       corrected_by: str = "c1", optimized_function = "linear", restricted_to: list = None, exclude: list = None, control_GCPs = None,
+                       corrected_by: str = "c1", optimized_function = "linear", control_GCPs = None,
                        method: str = 'Nelder-Mead', model = "both", city="San_francisco", cities = None):
 
     if cities is None:
@@ -126,13 +126,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             optimized_results_RFM = json.load(f)
 
             if corrected_by[0] == "c":
-                params = optimized_results_RFM[corrected_by][method][str(cities)][str(control_GCPs)][
-                    ("[]" if exclude is None else "e" + str(exclude)) if restricted_to is None else "r" + str(
-                        restricted_to)]
+                params = optimized_results_RFM[corrected_by][method][str(cities)][str(control_GCPs)]
             else:
-                params = optimized_results_RFM[frame_path][method][str(cities)][str(control_GCPs)][
-                    ("[]" if exclude is None else "e" + str(exclude)) if restricted_to is None else "r" + str(
-                        restricted_to)]
+                params = optimized_results_RFM[frame_path][method][str(cities)][str(control_GCPs)]
 
         if method == "gradient":
             params = torch.tensor(params, dtype=torch.float64)
@@ -179,13 +175,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             optimized_results_PSM = json.load(f)
 
             if corrected_by[0] == "c":
-                corrected_exterior_rotation = optimized_results_PSM[corrected_by][method][str(cities)][str(control_GCPs)][
-                    ("[]" if exclude is None else "e" + str(exclude)) if restricted_to is None else "r" + str(
-                        restricted_to)]
+                corrected_exterior_rotation = optimized_results_PSM[corrected_by][method][str(cities)][str(control_GCPs)]
             else:
-                corrected_exterior_rotation = optimized_results_PSM[frame_path][method][str(cities)][str(control_GCPs)][
-                    ("[]" if exclude is None else "e" + str(exclude)) if restricted_to is None else "r" + str(
-                        restricted_to)]
+                corrected_exterior_rotation = optimized_results_PSM[frame_path][method][str(cities)][str(control_GCPs)]
 
         original_exterior_rotation = FramePSMinfo["exterior_orientation"]
 
@@ -270,7 +262,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
     plt.tight_layout()
     plt.subplots_adjust(right=0.7)
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=20)
-    plt.title(f"corrected on {corrected_by} using {optimized_function} function with {method} method"+(f" restricted to {restricted_to}" if restricted_to is not None else "")+(f" excluding {exclude}" if exclude is not None else ""), fontsize=20)
+    plt.title(f"corrected on {corrected_by} using {optimized_function} function with {method} method", fontsize=20)
     plt.show()
 
 if __name__ == "__main__":

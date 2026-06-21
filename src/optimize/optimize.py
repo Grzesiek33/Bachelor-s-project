@@ -12,7 +12,7 @@ import torch
 import numpy as np
 from src.utils.RFM_model import *
 
-def optimize_camera_parameters(correction_model = None, correction_for: str = "c1", restricted_to: list = None, exclude: list = None, model = "PSM", cities=None):
+def optimize_camera_parameters(correction_model = None, correction_for: str = "c1", model = "PSM", cities=None):
     if correction_model is None:
         if model == "PSM":
             correction_model = {"correction_function": linear, "initial_params": linear_initial_params_PSM, "optimization_function": MSE, "q_constraint": 1, "linear_constraint": 1e-4, "quadratic_constraint": 1e-12, "method":"gradient", "lr":1e-9, "epochs":1000}
@@ -99,19 +99,17 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
                             model = PSM(P_camera, P_intrinsic, quaternion, sat_position, numpy=False)
 
                             for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
-                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0 and (restricted_to is None or GCP in restricted_to) and (exclude is None or GCP not in exclude):
-
-                                    x_ecef = float(GCPinfo[ct][GCP]["x_ecef"])
-                                    y_ecef = float(GCPinfo[ct][GCP]["y_ecef"])
-                                    z_ecef = float(GCPinfo[ct][GCP]["z_ecef"])
+                                x_ecef = float(GCPinfo[ct][GCP]["x_ecef"])
+                                y_ecef = float(GCPinfo[ct][GCP]["y_ecef"])
+                                z_ecef = float(GCPinfo[ct][GCP]["z_ecef"])
 
 
-                                    im_x, im_y = model(x_ecef, y_ecef, z_ecef)
+                                im_x, im_y = model(x_ecef, y_ecef, z_ecef)
 
-                                    row = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["row"]
-                                    col = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["col"]
+                                row = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["row"]
+                                col = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["col"]
 
-                                    total_error = total_error + correction_model["optimization_function"](col, row, im_x, im_y) + correction_model["q_constraint"] * ((1 - ( q[0]**2 + q[1]**2 + q[2]**2 + q[3]**2 )) ** 2)
+                                total_error = total_error + correction_model["optimization_function"](col, row, im_x, im_y) + correction_model["q_constraint"] * ((1 - ( q[0]**2 + q[1]**2 + q[2]**2 + q[3]**2 )) ** 2)
 
                     return total_error
 
@@ -148,9 +146,7 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
                             model = PSM(P_camera, P_intrinsic, quaternion, sat_position, numpy=True)
 
                             for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
-                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0 and (
-                                        restricted_to is None or GCP in restricted_to) and (
-                                        exclude is None or GCP not in exclude):
+                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0:
 
                                     x_ecef = float(GCPinfo[ct][GCP]["x_ecef"])
                                     y_ecef = float(GCPinfo[ct][GCP]["y_ecef"])
@@ -203,9 +199,7 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
                                               Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
 
                             for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
-                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0 and (
-                                        restricted_to is None or GCP in restricted_to) and (
-                                        exclude is None or GCP not in exclude):
+                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0:
                                     B = float(GCPinfo[ct][GCP]["lat"])
                                     L = float(GCPinfo[ct][GCP]["lon"])
                                     H = float(GCPinfo[ct][GCP]["alt"])
@@ -255,9 +249,7 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
                                               Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
 
                             for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
-                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0 and (
-                                        restricted_to is None or GCP in restricted_to) and (
-                                        exclude is None or GCP not in exclude):
+                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0:
                                     B = float(GCPinfo[ct][GCP]["lat"])
                                     L = float(GCPinfo[ct][GCP]["lon"])
                                     H = float(GCPinfo[ct][GCP]["alt"])
@@ -345,7 +337,7 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
     if str(control_GCPs) not in optimized_results[correction_for][correction_model["method"]][str(cities)]:
         optimized_results[correction_for][correction_model["method"]][str(cities)][str(control_GCPs)] = {}
 
-    optimized_results[correction_for][correction_model["method"]][str(cities)][str(control_GCPs)][("[]" if exclude is None else "e"+str(exclude)) if restricted_to is None else "r"+str(restricted_to)] = optimized_params
+    optimized_results[correction_for][correction_model["method"]][str(cities)][str(control_GCPs)] = optimized_params
 
     with open("../../optimization/" + correction_model[0].__name__ + ".json", "w") as f:
      json.dump(optimized_results, f, indent=2)
