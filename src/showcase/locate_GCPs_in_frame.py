@@ -19,9 +19,6 @@ with open(f"../../{city}/own_GCPs/GCPs.json", "r", encoding="utf-8") as GCPlib:
         for row in reader:
             polygon[row["filename"]] = wkt.loads(row["geom"])
 
-        for frame_name in polygon.keys():
-            FrameGCPs[frame_name] = []
-
         for GCP in JGCPlib:
 
             point = Point(JGCPlib[GCP]["lat"], JGCPlib[GCP]["lon"])
@@ -29,7 +26,9 @@ with open(f"../../{city}/own_GCPs/GCPs.json", "r", encoding="utf-8") as GCPlib:
             for frame_name, frame_polygon in polygon.items():
 
                 if frame_polygon.contains(point):
-                    print(f"GCP {GCP} is located within frame {frame_name}")
+                    print(f"GCP {GCP} located in frame {frame_name}")
+                    if frame_name not in FrameGCPs:
+                        FrameGCPs[frame_name] = []
                     FrameGCPs[frame_name].append(GCP)
 
 

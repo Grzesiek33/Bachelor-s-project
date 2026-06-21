@@ -42,10 +42,13 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
     # data
 
-    with open(f"../../{city}/FrameGCPs.json", "r") as f:
+    with open(f"../../{city}/own_GCPs/image_position.json", "r") as f:
         FrameGCPs = json.load(f)
 
-    GCPs = FrameGCPs[frame_path+".tif"]
+    if frame_path in FrameGCPs[re.search(r"c[1-3]", frame_path).group()]:
+        GCPs = FrameGCPs[re.search(r"c[1-3]", frame_path).group()][frame_path]["GCPs"].keys()
+    else:
+        GCPs = []
 
     colors = ["red", "green", "blue", "orange", "purple", "cyan", "magenta", "yellow", "brown", "pink"]
 
