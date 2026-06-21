@@ -7,10 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sympy import latex
 
-from src.optimize.correction_functions import linear_PSM, shift_PSM, rotate_PSM, quadratic_PSM
-from src.optimize.correction_functions_RFM import linear_RFM, shift_RFM, quadratic_RFM
-from src.utils.PSM_model import create_extrinsic
-from src.utils.RFM_model import RFM
+from src.utils.PSM_model import *
+from src.utils.RFM_model import *
 
 import torch
 
@@ -28,12 +26,18 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
 
     original_prediction_distances_PSM = 0
     original_prediction_distances_RFM = 0
+    original_prediction_distances_PSM_m = 0
+    original_prediction_distances_RFM_m = 0
 
     trained_on_distance_PSM=0
     control_distance_PSM=0
+    trained_on_distance_PSM_m=0
+    control_distance_PSM_m=0
 
     trained_on_distance_RFM=0
     control_distance_RFM=0
+    trained_on_distance_RFM_m=0
+    control_distance_RFM_m=0
 
     realGCPsposition = {}
 
@@ -63,7 +67,7 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
         P_camera = torch.tensor(FramePSMinfo["P_camera"], dtype=torch.float64)
         P_intrinsic = torch.tensor(FramePSMinfo["P_intrinsic"], dtype=torch.float64)
 
-        RFM_model = RFM(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
+        RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                         FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                         FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
                         FrameRFMinfo["SAMP_SCALE"], torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64),
@@ -95,6 +99,9 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
             original_prediction_distances_RFM += torch.sqrt((pred_im_x_RFM - real_im_x)**2 + (pred_im_y_RFM - real_im_y)**2).item()
             original_prediction_distances_PSM += torch.sqrt((pred_im_x_PSM - real_im_x)**2 + (pred_im_y_PSM - real_im_y)**2).item()
 
+            original_prediction_distances_RFM_m += torch.sqrt((pred_im_x_RFM - real_im_x)**2 + (pred_im_y_RFM - real_im_y)**2).item() * realGCPsposition[city][frame.split("_")[2]][frame]["GSD"]
+            original_prediction_distances_PSM_m += torch.sqrt((pred_im_x_PSM - real_im_x)**2 + (pred_im_y_PSM - real_im_y)**2).item() * realGCPsposition[city][frame.split("_")[2]][frame]["GSD"]
+
             line_num_coeffs = torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64)
             line_den_coeffs = torch.tensor(FrameRFMinfo["LINE_DEN_COEFFS"], dtype=torch.float64)
             samp_num_coeffs = torch.tensor(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=torch.float64)
@@ -117,7 +124,7 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
             line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = globals()[optimized_function + "_RFM"](
                 params, line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs)
 
-            RFM_model_corrected = RFM(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
+            RFM_model_corrected = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                             FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                             FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
                             FrameRFMinfo["SAMP_SCALE"], line_num_coeffs, line_den_coeffs, samp_num_coeffs,
@@ -150,7 +157,7 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
             quaternion, sat_position = globals()[optimized_function + "_PSM"](
                 [torch.tensor(p, dtype=torch.float64) for p in corrected_exterior_rotation], quaternion, sat_position)
 
-            P_extrinsic_corrected = create_extrinsic(quaternion, sat_position)
+            P_extrinsic_corrected = create_extrinsic_torch(quaternion, sat_position)
 
             pred_im_x_RFM = RFM_model_corrected(lon, lat, alt)[1]
             pred_im_y_RFM = RFM_model_corrected(lon, lat, alt)[0]
@@ -163,10 +170,17 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
             if realGCPsposition[city][frame.split("_")[2]][frame]["GCPs"][GCP]["control"]:
                 control_distance_RFM += torch.sqrt((pred_im_x_RFM - real_im_x)**2 + (pred_im_y_RFM - real_im_y)**2).item()
                 control_distance_PSM += torch.sqrt((pred_im_x_PSM - real_im_x)**2 + (pred_im_y_PSM - real_im_y)**2).item()
+
+                control_distance_RFM_m += torch.sqrt((pred_im_x_RFM - real_im_x)**2 + (pred_im_y_RFM - real_im_y)**2).item() * realGCPsposition[city][frame.split("_")[2]][frame]["GSD"]
+                control_distance_PSM_m += torch.sqrt((pred_im_x_PSM - real_im_x)**2 + (pred_im_y_PSM - real_im_y)**2).item() * realGCPsposition[city][frame.split("_")[2]][frame]["GSD"]
+
                 control_GCPs_ammount += 1
             else:
                 trained_on_distance_RFM += torch.sqrt((pred_im_x_RFM - real_im_x)**2 + (pred_im_y_RFM - real_im_y)**2).item()
                 trained_on_distance_PSM += torch.sqrt((pred_im_x_PSM - real_im_x)**2 + (pred_im_y_PSM - real_im_y)**2).item()
+
+                trained_on_distance_RFM_m += torch.sqrt((pred_im_x_RFM - real_im_x)**2 + (pred_im_y_RFM - real_im_y)**2).item() * realGCPsposition[city][frame.split("_")[2]][frame]["GSD"]
+                trained_on_distance_PSM_m += torch.sqrt((pred_im_x_PSM - real_im_x)**2 + (pred_im_y_PSM - real_im_y)**2).item() * realGCPsposition[city][frame.split("_")[2]][frame]["GSD"]
                 trained_on_GCPs_ammount += 1
 
     data = {
@@ -175,17 +189,25 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
             original_prediction_distances_RFM / (control_GCPs_ammount + trained_on_GCPs_ammount),
             trained_on_distance_RFM / trained_on_GCPs_ammount if trained_on_GCPs_ammount > 0 else 0,
             control_distance_RFM / control_GCPs_ammount if control_GCPs_ammount > 0 else 0
+
         ],
         "PSM_px": [
             original_prediction_distances_PSM / (control_GCPs_ammount + trained_on_GCPs_ammount),
             trained_on_distance_PSM / trained_on_GCPs_ammount if trained_on_GCPs_ammount > 0 else 0,
             control_distance_PSM / control_GCPs_ammount if control_GCPs_ammount > 0 else 0
+        ],
+        "RFM_m": [
+            original_prediction_distances_RFM_m / (control_GCPs_ammount + trained_on_GCPs_ammount),
+            trained_on_distance_RFM_m / trained_on_GCPs_ammount if trained_on_GCPs_ammount > 0 else 0,
+            control_distance_RFM_m / control_GCPs_ammount if control_GCPs_ammount > 0 else 0
+
+        ],
+        "PSM_m": [
+            original_prediction_distances_PSM_m / (control_GCPs_ammount + trained_on_GCPs_ammount),
+            trained_on_distance_PSM_m / trained_on_GCPs_ammount if trained_on_GCPs_ammount > 0 else 0,
+            control_distance_PSM_m / control_GCPs_ammount if control_GCPs_ammount > 0 else 0
         ]
     }
-
-    # Oblicz wartości w metrach (px * 0.69)
-    data["RFM_m"] = [val * 0.69 for val in data["RFM_px"]]
-    data["PSM_m"] = [val * 0.69 for val in data["PSM_px"]]
 
     # Wygeneruj tabelę w px
 
@@ -213,7 +235,6 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
     latex_table_px += r"\hline" + "\n"
     latex_table_px += r"\end{tabular}"
 
-    # Wygeneruj tabelę w m
     latex_table_m = r"\begin{tabular}{|c|c|c|}" + "\n"
     latex_table_m += r"\hline" + "\n"
     latex_table_m += r"Metric & RFM [m] & PSM [m] \\" + "\n"
@@ -237,7 +258,6 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
     latex_table_m += r"\hline" + "\n"
     latex_table_m += r"\end{tabular}"
 
-    # Wypisze obie tabele obok siebie za pomocą minipage
     latex_output = r"\begin{center}" + "\n"
     latex_output += r"\begin{minipage}{0.45\textwidth}" + "\n"
     latex_output += r"\centering" + "\n"
