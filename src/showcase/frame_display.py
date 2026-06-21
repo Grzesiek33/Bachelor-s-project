@@ -208,7 +208,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
             quaternion, sat_position = torch.split(corrected_parameters, [4, 3])
 
-            P_extrinsic = create_extrinsic_torch(quaternion, sat_position)
+            P_extrinsic = create_extrinsic(quaternion, sat_position, numpy=False)
         else:
             quaternion = np.array(
                 [original_exterior_rotation["qw_ecef"], original_exterior_rotation["qx_ecef"],
@@ -228,7 +228,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
             quaternion, sat_position = np.split(corrected_parameters, [4])
 
-            P_extrinsic = create_extrinsic_numpy(quaternion, sat_position)
+            P_extrinsic = create_extrinsic(quaternion, sat_position, numpy=True)
 
         for GCP in GCPs:
 

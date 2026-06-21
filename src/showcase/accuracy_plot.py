@@ -7,10 +7,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sympy import latex
 
-from src.optimize.correction_functions import linear_PSM, shift_PSM, rotate_PSM, quadratic_PSM
-from src.optimize.correction_functions_RFM import linear_RFM, shift_RFM, quadratic_RFM
-from src.utils.PSM_model import create_extrinsic
-from src.utils.RFM_model import RFM
+from src.optimize.correction_functions import *
+from src.utils.PSM_model import *
+from src.utils.RFM_model import *
 
 import torch
 
@@ -26,6 +25,7 @@ def makeAccuracyPlot():
         realGCPsposition = json.load(f)
 
     error = []
+    error_m = []
 
     for i in range(1, 11):
         tab = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", ""]
@@ -33,6 +33,7 @@ def makeAccuracyPlot():
         params = optim["c1"]["gradient"]["['San_francisco', 'Angkor_wat', 'Cocabamba']"][f"{{'San_francisco': '{', '.join(tab)}', 'Angkor_wat': '1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ', 'Cocabamba': '1, 2, 3, '}}"]["[]"]
 
         error.append([])
+        error_m.append([])
 
         for frame in realGCPsposition["c1"]:
 
@@ -68,7 +69,7 @@ def makeAccuracyPlot():
                         [torch.tensor(p, dtype=torch.float64) for p in params], quaternion,
                         sat_position)
 
-                    P_extrinsic_corrected = create_extrinsic(quaternion, sat_position)
+                    P_extrinsic_corrected = create_extrinsic_torch(quaternion, sat_position)
 
                     im_space = P_camera @ P_intrinsic @ P_extrinsic_corrected @ torch.tensor(
                         [x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
@@ -77,9 +78,10 @@ def makeAccuracyPlot():
                     pred_im_y_PSM = im_space[1] / im_space[2]
 
                     error[i-1].append(np.sqrt((pred_im_x_PSM.item() - real_im_x) ** 2 + (pred_im_y_PSM.item() - real_im_y) ** 2))
-        error[i-1] = np.mean(error[i-1]) * 0.69
+                    error_m[i-1].append(error[i-1][-1] * FramePSMinfo["GSD"])
+        error_m[i-1] = np.mean(error_m[i-1])
 
-    plt.plot(range(1, 11), error, marker="o")
+    plt.plot(range(1, 11), error_m, marker="o")
     plt.xlabel("GCP used for optimization")
     plt.ylabel("Mean error (meters)")
     plt.title("Accuracy of PSM correction for a chosen GCP")

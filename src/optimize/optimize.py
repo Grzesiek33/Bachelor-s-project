@@ -1,4 +1,5 @@
 import os
+import warnings
 
 from scipy.optimize import minimize
 import json
@@ -11,9 +12,15 @@ import torch
 import numpy as np
 from src.utils.RFM_model import *
 
-def optimize_camera_parameters(correction_model = (linear, linear_initial_params_PSM),
-                               correction_for: str = "c1", restricted_to: list = None, exclude: list = None, method: str = 'Nelder-Mead',
-                               lr=1e-5, epochs=1000, optimization_function=MSE, q_constraint : float = 1, model ="PSM", cities=None):
+def optimize_camera_parameters(correction_model = None, correction_for: str = "c1", restricted_to: list = None, exclude: list = None, model = "PSM", cities=None):
+    if correction_model is None:
+        if model == "PSM":
+            correction_model = {"correction_function": linear, "initial_params": linear_initial_params_PSM, "optimization_function": MSE, "q_constraint": 1, "linear_constraint": 1e-4, "quadratic_constraint": 1e-12, "method":"gradient", "lr":1e-9, "epochs":1000}
+        elif model == "RFM":
+            correction_model = {"correction_function": linear, "initial_params": linear_initial_params_RFM, "optimization_function": MSE, "q_constraint": 1, "linear_constraint": 1e-4, "quadratic_constraint": 1e-12, "method":"gradient", "lr":1e-9, "epochs":1000}
+        else:
+            raise ValueError(f"model {model} not implemented, did you mean 'PSM' or 'RFM'?")
+
     if cities is None:
         cities = ["San_francisco", "Angkor_wat", "Cocabamba"]
 
@@ -41,10 +48,25 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
                     if realGCPsposition[city][cam][frame]["GCPs"][GCP]["control"] == 1:
                         control_GCPs[city] += GCP + ", "
 
+    if "method" not in correction_model:
+        warnings.warn(
+            "Method not specified, using gradient instead",
+            UserWarning
+        )
+        correction_model["method"] = "gradient"
+    elif correction_model["method"] != "gradient" and correction_model["method"] not in ["Nelder-Mead", "Powell", "CG", "BFGS", "L-BFGS-B", "TNC", "COBYLA", "SLSQP"]:
+        raise ValueError(f"Method {correction_model['method']} not implemented, did you mean 'gradient', 'Nelder-Mead', 'Powell', 'CG', 'BFGS', 'L-BFGS-B', 'TNC', 'COBYLA' or 'SLSQP'?")
+
+    if "epochs" not in correction_model:
+        warnings.warn(
+            "epochs not specified, using 1000 instead. Note that for non-gradient methods, this denotes the maximum number of iterations",
+            UserWarning
+        )
+        correction_model["lr"] = "1e-5"
+
     if correction_for[0] == "c":
         if model == "PSM":
-
-            if method == "gradient":
+            if correction_model["method"] == "gradient":
 
                 def objective_function(params):
                     total_error = torch.tensor(0, dtype=torch.float64)
@@ -67,14 +89,14 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
                                 [exterior_rotation["x_ecef_meters"], exterior_rotation["y_ecef_meters"],
                                  exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
 
-                            correction_function = correction_model[0](torch.cat([quaternion, sat_position]), no_parameters=7,
+                            correction_function = correction_model["correction_function"](torch.cat([quaternion, sat_position]), no_parameters=7,
                                                          numpy=False, linear_constraint=1e-4)
 
                             corrected_parameters = correction_function(params)
 
                             q, sat_pos = corrected_parameters[:4], corrected_parameters[4:]
 
-                            model = PSM_torch(P_camera, P_intrinsic, quaternion, sat_position)
+                            model = PSM(P_camera, P_intrinsic, quaternion, sat_position, numpy=False)
 
                             for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
                                 if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0 and (restricted_to is None or GCP in restricted_to) and (exclude is None or GCP not in exclude):
@@ -89,7 +111,7 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
                                     row = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["row"]
                                     col = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["col"]
 
-                                    total_error = total_error + optimization_function(col, row, im_x, im_y) + q_constraint * ((1 - ( q[0]**2 + q[1]**2 + q[2]**2 + q[3]**2 )) ** 2)
+                                    total_error = total_error + correction_model["optimization_function"](col, row, im_x, im_y) + correction_model["q_constraint"] * ((1 - ( q[0]**2 + q[1]**2 + q[2]**2 + q[3]**2 )) ** 2)
 
                     return total_error
 
@@ -115,7 +137,7 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
                                 [exterior_rotation["x_ecef_meters"], exterior_rotation["y_ecef_meters"],
                                  exterior_rotation["z_ecef_meters"]], dtype=np.float64)
 
-                            correction_function = correction_model[0](np.concat([quaternion, sat_position]),
+                            correction_function = correction_model["correction_function"](np.concat([quaternion, sat_position]),
                                                                       no_parameters=7,
                                                                       numpy=True, linear_constraint=1e-4)
 
@@ -123,7 +145,7 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
 
                             q, sat_pos = corrected_parameters[:4], corrected_parameters[4:]
 
-                            model = PSM_numpy(P_camera, P_intrinsic, quaternion, sat_position)
+                            model = PSM(P_camera, P_intrinsic, quaternion, sat_position, numpy=True)
 
                             for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
                                 if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0 and (
@@ -139,15 +161,13 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
                                     row = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["row"]
                                     col = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["col"]
 
-                                    total_error = total_error + optimization_function(col, row, im_x,
-                                                                                      im_y) + q_constraint * ((1 - (
-                                                q[0] ** 2 + q[1] ** 2 + q[2] ** 2 + q[3] ** 2)) ** 2)
+                                    total_error = total_error + correction_model["optimization_function"](col, row, im_x, im_y) + correction_model["q_constraint"] * ((1 - (q[0] ** 2 + q[1] ** 2 + q[2] ** 2 + q[3] ** 2)) ** 2)
 
                     return total_error
 
         elif model == "RFM":
 
-            if method == "gradient":
+            if correction_model["method"] == "gradient":
 
                 def objective_function(params):
                     total_error = 0
@@ -169,7 +189,7 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
                             long_scale = frameInfo[ct][fr]["LONG_SCALE"]
                             height_scale = frameInfo[ct][fr]["HEIGHT_SCALE"]
 
-                            correction_function = correction_model[0](
+                            correction_function = correction_model["correction_function"](
                                 torch.cat([Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs]),
                                 no_parameters=80,
                                 numpy=False)
@@ -195,7 +215,7 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
 
                                     im_y, im_x = model(B, L, H)
 
-                                    total_error = total_error + optimization_function(col, row, im_x, im_y)
+                                    total_error = total_error + correction_model["optimization_function"](col, row, im_x, im_y)
 
                     return total_error
 
@@ -221,7 +241,7 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
                             long_scale = frameInfo[ct][fr]["LONG_SCALE"]
                             height_scale = frameInfo[ct][fr]["HEIGHT_SCALE"]
 
-                            correction_function = correction_model[0](
+                            correction_function = correction_model["correction_function"](
                                 np.concat([Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs]),
                                 no_parameters=80,
                                 numpy=True)
@@ -247,7 +267,7 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
 
                                     im_y, im_x = model(B, L, H)
 
-                                    total_error = total_error + optimization_function(col, row, im_x, im_y)
+                                    total_error = total_error + correction_model["optimization_function"](col, row, im_x, im_y)
 
                     return total_error
         else:
@@ -283,18 +303,25 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
     else:
         raise ValueError(f"correction for {correction_for} not implemented")
 
-    if method != "gradient":
+    if correction_model["method"] != "gradient":
 
-        result = minimize(objective_function, correction_model[1], method=method, options={"maxiter": epochs})
+        result = minimize(objective_function, correction_model["initial_params"], method=correction_model["method"], options={"maxiter": correction_model["epochs"]})
 
         optimized_params = result.x.tolist()
 
     else:
-        params = torch.from_numpy(correction_model[1]).clone().detach().requires_grad_(True)
+        params = torch.from_numpy(correction_model["initial_params"]).clone().detach().requires_grad_(True)
 
-        optimizer = torch.optim.Adam([params], lr=lr)
+        if "lr" not in correction_model:
+            warnings.warn(
+                "Learning rate not specified, using 1e-5 instead",
+                UserWarning
+            )
+            correction_model["lr"] = 1e-5
 
-        for _ in range(epochs):
+        optimizer = torch.optim.Adam([params], lr=correction_model["lr"])
+
+        for _ in range(correction_model["epochs"]):
             optimizer.zero_grad()
             loss = objective_function(params)
             loss.backward()
@@ -311,14 +338,14 @@ def optimize_camera_parameters(correction_model = (linear, linear_initial_params
     if correction_for not in optimized_results:
         optimized_results[correction_for] = {}
 
-    if method not in optimized_results[correction_for]:
-        optimized_results[correction_for][method] = {}
-    if str(cities) not in optimized_results[correction_for][method]:
-        optimized_results[correction_for][method][str(cities)] = {}
-    if str(control_GCPs) not in optimized_results[correction_for][method][str(cities)]:
-        optimized_results[correction_for][method][str(cities)][str(control_GCPs)] = {}
+    if correction_model["method"] not in optimized_results[correction_for]:
+        optimized_results[correction_for][correction_model["method"]] = {}
+    if str(cities) not in optimized_results[correction_for][correction_model["method"]]:
+        optimized_results[correction_for][correction_model["method"]][str(cities)] = {}
+    if str(control_GCPs) not in optimized_results[correction_for][correction_model["method"]][str(cities)]:
+        optimized_results[correction_for][correction_model["method"]][str(cities)][str(control_GCPs)] = {}
 
-    optimized_results[correction_for][method][str(cities)][str(control_GCPs)][("[]" if exclude is None else "e"+str(exclude)) if restricted_to is None else "r"+str(restricted_to)] = optimized_params
+    optimized_results[correction_for][correction_model["method"]][str(cities)][str(control_GCPs)][("[]" if exclude is None else "e"+str(exclude)) if restricted_to is None else "r"+str(restricted_to)] = optimized_params
 
     with open("../../optimization/" + correction_model[0].__name__ + ".json", "w") as f:
      json.dump(optimized_results, f, indent=2)
@@ -330,10 +357,10 @@ if __name__ == "__main__":
 
     # only one GCP San Francisco
 
-    optimize_camera_parameters(method="gradient", lr=5e-3, epochs=100, model = "RFM", correction_model=(shift, shift_initial_params_RFM))
-    optimize_camera_parameters(method="gradient", lr=1e-4, epochs=100, model = "PSM", correction_model=(shift, shift_initial_params_PSM))
-    optimize_camera_parameters(epochs=100, model = "RFM", correction_model=(shift, shift_initial_params_RFM))
-    optimize_camera_parameters(model = "PSM", correction_model=(shift, shift_initial_params_PSM))
+    # optimize_camera_parameters(method="gradient", lr=5e-3, epochs=100, model = "RFM", correction_model=(shift, shift_initial_params_RFM))
+    # optimize_camera_parameters(method="gradient", lr=1e-4, epochs=100, model = "PSM", correction_model=(shift, shift_initial_params_PSM))
+    # optimize_camera_parameters(epochs=100, model = "RFM", correction_model=(shift, shift_initial_params_RFM))
+    # optimize_camera_parameters(model = "PSM", correction_model=(shift, shift_initial_params_PSM))
 
     # optimize_camera_parameters(method="gradient", lr=5e-5, epochs=1000, model = "RFM", correction_model=(linear_RFM, linear_initial_params_RFM))
     # optimize_camera_parameters(method="gradient", lr=1e-11, epochs=1000, model = "PSM", correction_model=(linear_PSM, linear_initial_params_PSM))
