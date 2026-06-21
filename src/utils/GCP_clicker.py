@@ -16,11 +16,11 @@ import cv2
 # frame_path = "1291951336.84309149_sc00103_c1_PAN_i0000000130"
 # frame_path = "1291951335.11095381_sc00103_c1_PAN_i0000000050"
 
-#Cocabamba
+#Cochabamba
 
 frame_path = "1293376734.34837317_sc00113_c1_PAN_i0000000200"
 
-city = "Cocabamba"
+city = "Cochabamba"
 
 clicked_pixel = (0,0)
 

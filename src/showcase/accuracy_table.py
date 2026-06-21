@@ -17,7 +17,7 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
                       restricted_to: list = None, exclude: list = None, method: str = 'Nelder-Mead', city="San_francisco"):
 
     if cities is None:
-        cities = ["San_francisco", "Angkor_wat", "Cocabamba"]
+        cities = ["San_francisco", "Angkor_wat", "Cochabamba"]
 
     with open(f"../../{city}/own_GCPs/GCPs.json", "r") as f:
         GCPinfo = json.load(f)
@@ -274,8 +274,8 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
         print(r"\textbf{San Francisco}" + "\n")
     elif(city=="Angkor_wat"):
         print(r"\textbf{Angkor Wat}" + "\n")
-    elif(city=="Cocabamba"):
-        print(r"\textbf{Cocabamba}" + "\n")
+    elif(city=="Cochabamba"):
+        print(r"\textbf{Cochabamba}" + "\n")
 
     print(latex_output)
 
@@ -286,20 +286,20 @@ if __name__ == "__main__":
     #
     # makeAccuracyTable(corrected_by="c1", optimized_function="shift", method="gradient", city="San_francisco")
     # # makeAccuracyTable(corrected_by="c1", optimized_function="shift", method="gradient", city="Angkor_wat")
-    # makeAccuracyTable(corrected_by="c1", optimized_function="shift", method="gradient", city="Cocabamba")
+    # makeAccuracyTable(corrected_by="c1", optimized_function="shift", method="gradient", city="Cochabamba")
 
     # print(r"\newpage" + "\n")
     # print(r"\subsection{Correction: linear}" + "\n")
     #
     # makeAccuracyTable(corrected_by="c1", optimized_function="linear", method="gradient", city="San_francisco")
     # # makeAccuracyTable(corrected_by="c1", optimized_function="linear", method="gradient", city="Angkor_wat")
-    # makeAccuracyTable(corrected_by="c1", optimized_function="linear", method="gradient", city="Cocabamba")
+    # makeAccuracyTable(corrected_by="c1", optimized_function="linear", method="gradient", city="Cochabamba")
     #
     # # print(r"\newpage" + "\n")
     print(r"\subsection{Correction: quadratic}" + "\n")
 
     makeAccuracyTable(corrected_by="c1", optimized_function="quadratic", method="gradient", city="San_francisco")
     # makeAccuracyTable(corrected_by="c1", optimized_function="quadratic", method="gradient", city="Angkor_wat")
-    makeAccuracyTable(corrected_by="c1", optimized_function="quadratic", method="gradient", city="Cocabamba")
+    makeAccuracyTable(corrected_by="c1", optimized_function="quadratic", method="gradient", city="Cochabamba")
 
     # print(r"\newpage" + "\n")

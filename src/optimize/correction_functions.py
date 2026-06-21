@@ -1,14 +1,15 @@
 import numpy as np
 import torch
 
-shift_initial_params_PSM = np.zeros(7, dtype=np.float64)
-linear_initial_params_PSM = np.zeros(7*7 + 7, dtype=np.float64)
-quadratic_initial_params_PSM = np.zeros(7*7*7 + 7*7 + 7, dtype=np.float64)
-
-shift_initial_params_RFM = np.zeros(80, dtype=np.float64)
-linear_initial_params_RFM = np.zeros(80*80 + 80, dtype=np.float64)
-quadratic_initial_params_RFM = np.zeros(80*80*80 + 80*80 + 80, dtype=np.float64)
-
+def zero_based_initial_params(correction_function, no_parameters):
+    if correction_function == "shift":
+        return np.zeros(no_parameters, dtype=np.float64)
+    elif correction_function == "linear":
+        return np.zeros(no_parameters**2 + no_parameters, dtype=np.float64)
+    elif correction_function == "quadratic":
+        return np.zeros(no_parameters**3 + no_parameters**2 + no_parameters, dtype=np.float64)
+    else:
+        raise ValueError(f"Unknown initial parameters for correction function: {correction_function}")
 
 def linear(args, no_parameters, numpy=False, linear_constraint=1e-4, **kwargs):
     if numpy:

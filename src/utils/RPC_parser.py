@@ -14,7 +14,7 @@ fields = [
 "HEIGHT_SCALE"
 ]
 
-city = "Cocabamba"
+city = "Cochabamba"
 
 folder = Path(rf"../../{city}/l1a_frames")
 

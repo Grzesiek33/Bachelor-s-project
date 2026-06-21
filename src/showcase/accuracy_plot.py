@@ -30,7 +30,7 @@ def makeAccuracyPlot():
     for i in range(1, 11):
         tab = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", ""]
         del tab[i-1]
-        params = optim["c1"]["gradient"]["['San_francisco', 'Angkor_wat', 'Cocabamba']"][f"{{'San_francisco': '{', '.join(tab)}', 'Angkor_wat': '1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ', 'Cocabamba': '1, 2, 3, '}}"]["[]"]
+        params = optim["c1"]["gradient"]["['San_francisco', 'Angkor_wat', 'Cochabamba']"][f"{{'San_francisco': '{', '.join(tab)}', 'Angkor_wat': '1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ', 'Cochabamba': '1, 2, 3, '}}"]["[]"]
 
         error.append([])
         error_m.append([])
