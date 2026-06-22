@@ -14,7 +14,7 @@ from src.utils.cities import supported_cities
 
 
 def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,
-                       corrected_by: str = "c1", optimized_function = "linear", train_GCPs = "all",
+                       corrected_by: str = "c1", optimized_function = "linear", train_GCPs = None,
                        method: str = 'Nelder-Mead', model = "both", city="San_francisco"):
 
     # frame
@@ -65,7 +65,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
     realGCPsposition = {}
 
-    if train_GCPs == "all":
+    if train_GCPs == None:
         cities = supported_cities
         train_GCPs = {}
 
@@ -232,7 +232,7 @@ if __name__ == "__main__":
     # show_GCPs_on_frame("1293562079.26564479_sc00113_c1_PAN_i0000000150", method_PSM="gradient", optimized_function="shift")
 
 
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", method="gradient", corrected_by="c1", city="San_francisco")
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", method="gradient", corrected_by="c1", city="San_francisco", train_GCPs={"San_francisco": ["1", "3"]})
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method="gradient", optimized_function="linear")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="quadratic")
 

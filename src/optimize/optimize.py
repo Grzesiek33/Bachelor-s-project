@@ -11,9 +11,32 @@ import torch
 import numpy as np
 from src.utils.RFM_model import *
 from src.utils.cities import supported_cities
+from itertools import combinations
 
+def automated_optimize(correction_model = None, correction_for: str = "c1", model = "PSM", train_set = None, supress_warnings=True):
+    realGCPsposition = {}
+    train_GCPs = {}
 
-def optimize_camera_parameters(correction_model = None, correction_for: str = "c1", model = "PSM", train_GCPs = "all", supress_warnings=True):
+    cities = supported_cities
+    for city in cities:
+        with open(f"../../{city}/own_GCPs/image_position.json", "r") as f:
+            realGCPsposition[city] = json.load(f)
+
+        train_GCPs[city] = []
+        for cam in realGCPsposition[city]:
+            for frame in realGCPsposition[city][cam]:
+                for GCP in realGCPsposition[city][cam][frame]["GCPs"]:
+                    train_GCPs[city].append(GCP)
+
+    if train_set is None:
+        train_set = {city: [i for i in range(1, len(train_GCPs[city])+1)] for city in supported_cities}
+
+    for city in train_set:
+        for i in train_set[city]:
+            for comb in combinations(train_GCPs[city], i):
+                optimize_camera_parameters({city: list(comb)}, correction_model, correction_for, model, supress_warnings)
+
+def optimize_camera_parameters(train_GCPs = "all", correction_model = None, correction_for: str = "c1", model = "PSM", supress_warnings=True):
     if correction_model is None:
         if model == "PSM":
             correction_model = {"correction_function": linear, "initial_params": zero_based_initial_params("linear", 7), "optimization_function": MSE, "q_constraint": 1, "correction_function_parameters": {"linear_constraint": 1e-4, "quadratic_constraint": 1e-12, "no_parameters": 7}, "method": "gradient", "lr":1e-9, "epochs":1000}
@@ -72,9 +95,8 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
     frameInfo = {}
 
     if train_GCPs == "all":
-        cities = supported_cities
         train_GCPs = {}
-
+        cities = supported_cities
         for city in cities:
             with open(f"../../{city}/own_GCPs/GCPs.json", "r") as f:
                 GCPinfo[city] = json.load(f)
@@ -90,7 +112,6 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
                 for frame in realGCPsposition[city][cam]:
                     for GCP in realGCPsposition[city][cam][frame]["GCPs"]:
                         train_GCPs[city].append(GCP)
-
     else:
         cities = train_GCPs.keys()
         for city in cities:
@@ -377,8 +398,11 @@ if __name__ == "__main__":
 
     # only one GCP San Francisco
 
-    optimize_camera_parameters(model = "RFM", correction_model={"correction_function": shift})
-    optimize_camera_parameters(model = "PSM", correction_model={"correction_function": shift})
+    automated_optimize(model = "RFM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]})
+    automated_optimize(model = "PSM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]})
+
+    # optimize_camera_parameters(model = "RFM", correction_model={"correction_function": shift})
+    # optimize_camera_parameters(model = "PSM", correction_model={"correction_function": shift})
     # optimize_camera_parameters(epochs=100, model = "RFM", correction_model=(shift, shift_initial_params_RFM))
     # optimize_camera_parameters(model = "PSM", correction_model=(shift, shift_initial_params_PSM))
 
