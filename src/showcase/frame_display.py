@@ -4,6 +4,8 @@ import matplotlib
 import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
+import hashlib
+from matplotlib import colors as mcolors
 from src.optimize.correction_functions import *
 from src.utils.PSM_model import *
 from src.utils.RFM_model import *
@@ -15,7 +17,7 @@ from src.utils.cities import supported_cities
 
 def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,
                        corrected_by: str = "c1", optimized_function = "linear", train_GCPs = None,
-                       method: str = 'Nelder-Mead', model = "both", city="San_francisco"):
+                       method: str = 'Nelder-Mead', model = "both", city="San_francisco", colors = None):
 
     # frame
 
@@ -49,7 +51,16 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
     else:
         GCPs = []
 
-    colors = ["red", "green", "blue", "orange", "purple", "cyan", "magenta", "yellow", "brown", "pink"]
+    if colors is None:
+
+        if len(GCPs) <= 10:
+            colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
+        else:
+            cmap = matplotlib.colormaps.get_cmap('viridis', len(GCPs))
+            colors = [mcolors.to_hex(cmap(i)) for i in range(len(GCPs))]
+
+    elif len(GCPs) > len(colors):
+        raise ValueError(f"Not enough colors provided for the number of GCPs. {len(GCPs)} GCPs but only {len(colors)} colors.")
 
     GCPs_colors = {GCP: colors[i % len(colors)] for i, GCP in enumerate(GCPs)}
 
