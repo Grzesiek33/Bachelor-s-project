@@ -49,11 +49,10 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
         control_GCPs = {}
         for ct in cities:
             control_GCPs[ct] = 0
-            for cam in realGCPsposition[ct]:
-                for frame in realGCPsposition[ct][cam]:
-                    for GCP in realGCPsposition[ct][cam][frame]["GCPs"]:
-                        if realGCPsposition[ct][cam][frame]["GCPs"][GCP]["control"] == 1:
-                            control_GCPs[ct] += 1
+            for frame in realGCPsposition[ct]:
+                for GCP in realGCPsposition[ct][frame]["GCPs"]:
+                    if realGCPsposition[ct][frame]["GCPs"][GCP]["control"] == 1:
+                        control_GCPs[ct] += 1
 
     for frame in realGCPsposition[city][corrected_by]:
 
@@ -157,7 +156,7 @@ def makeAccuracyTable(corrected_by: str = "c1", optimized_function = "linear", c
             quaternion, sat_position = globals()[optimized_function + "_PSM"](
                 [torch.tensor(p, dtype=torch.float64) for p in corrected_exterior_rotation], quaternion, sat_position)
 
-            P_extrinsic_corrected = create_extrinsic_torch(quaternion, sat_position)
+            P_extrinsic_corrected = create_extrinsic(quaternion, sat_position, numpy=False)
 
             pred_im_x_RFM = RFM_model_corrected(lon, lat, alt)[1]
             pred_im_y_RFM = RFM_model_corrected(lon, lat, alt)[0]

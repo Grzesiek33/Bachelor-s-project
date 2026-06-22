@@ -19,9 +19,8 @@ def Parse_GSDs(cites = None):
                 for row in reader:
                     GSDs[row["filename"]] = float(row["gsd"])
 
-                for cam in ["c1", "c2", "c3"]:
-                    for frame in frameInfo[cam]:
-                        frameInfo[cam][frame]["GSD"] = GSDs[frame + ".tif"]
+                for frame in frameInfo:
+                    frameInfo[frame]["GSD"] = GSDs[frame + ".tif"]
 
 
                 print(frameInfo)

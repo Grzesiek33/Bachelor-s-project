@@ -15,8 +15,7 @@ import torch
 from src.utils.cities import supported_cities
 
 
-def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,
-                       corrected_by: str = "c1", optimized_function = "linear", train_GCPs = None,
+def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,  optimized_function = "linear", train_GCPs = None,
                        method: str = 'Nelder-Mead', model = "both", city="San_francisco", colors = None):
 
     # frame
@@ -46,8 +45,8 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
     with open(f"../../{city}/own_GCPs/image_position.json", "r") as f:
         FrameGCPs = json.load(f)
 
-    if frame_path in FrameGCPs[frame_path.split("_")[2]]:
-        GCPs = FrameGCPs[frame_path.split("_")[2]][frame_path]["GCPs"].keys()
+    if frame_path in FrameGCPs:
+        GCPs = FrameGCPs[frame_path]["GCPs"].keys()
     else:
         GCPs = []
 
@@ -56,8 +55,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
         if len(GCPs) <= 10:
             colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
         else:
-            cmap = matplotlib.colormaps.get_cmap('viridis', len(GCPs))
-            colors = [mcolors.to_hex(cmap(i)) for i in range(len(GCPs))]
+            cmap = matplotlib.colormaps.get_cmap('viridis')
+            samples = np.linspace(0, 1, len(GCPs), endpoint=True)
+            colors = [mcolors.to_hex(cmap(i)) for i in samples]
 
     elif len(GCPs) > len(colors):
         raise ValueError(f"Not enough colors provided for the number of GCPs. {len(GCPs)} GCPs but only {len(colors)} colors.")
@@ -85,10 +85,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                 realGCPsposition[ct] = json.load(f)
 
             train_GCPs[ct] = []
-            for cam in realGCPsposition[ct]:
-                for frame in realGCPsposition[ct][cam]:
-                    for GCP in realGCPsposition[ct][cam][frame]["GCPs"]:
-                        train_GCPs[ct].append(GCP)
+            for frame in realGCPsposition[ct]:
+                for GCP in realGCPsposition[ct][frame]["GCPs"]:
+                    train_GCPs[ct].append(GCP)
 
     else:
         cities = train_GCPs.keys()
@@ -139,10 +138,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
         with open(f"../../optimization/" + optimized_function + "_RFM.json", "r") as f:
             optimized_results_RFM = json.load(f)
 
-            if corrected_by[0] == "c":
-                params = optimized_results_RFM[corrected_by][method][str(train_GCPs)]
-            else:
-                params = optimized_results_RFM[frame_path][method][str(train_GCPs)]
+            params = optimized_results_RFM[method][str(train_GCPs)]
 
         params = torch.tensor(params, dtype=torch.float64)
 
@@ -156,10 +152,6 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
         line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = torch.split(correction_function_RFM(params), [20, 20, 20, 20])
 
-        corrected_parameters = correction_function_RFM(params)
-
-        line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = np.split(corrected_parameters, [20, 40, 60])
-
         RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                     FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                     FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
@@ -168,10 +160,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
             optimized_results_PSM = json.load(f)
 
-        if corrected_by[0] == "c":
-            corrected_exterior_rotation = optimized_results_PSM[corrected_by][method][str(train_GCPs)]
-        else:
-            corrected_exterior_rotation = optimized_results_PSM[frame_path][method][str(train_GCPs)]
+            corrected_exterior_rotation = optimized_results_PSM[method][str(train_GCPs)]
 
         original_exterior_rotation = FramePSMinfo["exterior_orientation"]
 
@@ -219,9 +208,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                     plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="*", label=f"{GCP} (corrected position RFM)", s=100)
 
     if show_real_GCPs:
-        for GCP in realGCPsposition[city][frame_path.split("_")[2]][frame_path]["GCPs"]:
-            real_im_x = realGCPsposition[city][frame_path.split("_")[2]][frame_path]["GCPs"][GCP]["col"]
-            real_im_y = realGCPsposition[city][frame_path.split("_")[2]][frame_path]["GCPs"][GCP]["row"]
+        for GCP in realGCPsposition[city][frame_path]["GCPs"]:
+            real_im_x = realGCPsposition[city][frame_path]["GCPs"][GCP]["col"]
+            real_im_y = realGCPsposition[city][frame_path]["GCPs"][GCP]["row"]
 
             if GCP not in train_GCPs[city]:
                 marker = "^"
@@ -233,7 +222,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
     plt.tight_layout()
     plt.subplots_adjust(right=0.7)
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=20)
-    plt.title(f"corrected on {corrected_by} using {optimized_function} function with {method} method", fontsize=20)
+    plt.title(f"corrected {optimized_function} function with {method} method", fontsize=20)
     plt.show()
 
 if __name__ == "__main__":
@@ -243,7 +232,7 @@ if __name__ == "__main__":
     # show_GCPs_on_frame("1293562079.26564479_sc00113_c1_PAN_i0000000150", method_PSM="gradient", optimized_function="shift")
 
 
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", method="gradient", corrected_by="c1", city="San_francisco", train_GCPs={"San_francisco": ["1", "3"]})
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", method="gradient", city="San_francisco", train_GCPs={"San_francisco": ["1", "3"]})
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method="gradient", optimized_function="linear")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="quadratic")
 
