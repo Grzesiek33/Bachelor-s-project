@@ -11,12 +11,12 @@ from src.utils.RFM_model import *
 
 import torch
 
-def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,
-                       corrected_by: str = "c1", optimized_function = "linear", control_GCPs = None,
-                       method: str = 'Nelder-Mead', model = "both", city="San_francisco", cities = None):
+from src.utils.cities import supported_cities
 
-    if cities is None:
-        cities = ["San_francisco", "Angkor_wat", "Cochabamba"]
+
+def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,
+                       corrected_by: str = "c1", optimized_function = "linear", train_GCPs = "all",
+                       method: str = 'Nelder-Mead', model = "both", city="San_francisco"):
 
     # frame
 
@@ -66,19 +66,29 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
     realGCPsposition = {}
 
-    for ct in cities:
-        with open(f"../../{ct}/own_GCPs/image_position.json", "r") as f:
-            realGCPsposition[ct] = json.load(f)
+    if train_GCPs == "all":
+        cities = supported_cities
+        train_GCPs = {}
 
-    if control_GCPs is None:
-        control_GCPs = {}
         for ct in cities:
-            control_GCPs[ct] = ""
+            with open(f"../../{ct}/own_GCPs/image_position.json", "r") as f:
+                realGCPsposition[ct] = json.load(f)
+
+            train_GCPs[ct] = []
             for cam in realGCPsposition[ct]:
                 for frame in realGCPsposition[ct][cam]:
                     for GCP in realGCPsposition[ct][cam][frame]["GCPs"]:
-                        if realGCPsposition[ct][cam][frame]["GCPs"][GCP]["control"] == 1:
-                            control_GCPs[ct] += GCP + ", "
+                        train_GCPs[ct].append(GCP)
+
+    else:
+        cities = train_GCPs.keys()
+        for ct in cities:
+            with open(f"../../{ct}/own_GCPs/image_position.json", "r") as f:
+                realGCPsposition[ct] = json.load(f)
+
+    for ct in cities:
+        with open(f"../../{ct}/own_GCPs/image_position.json", "r") as f:
+            realGCPsposition[ct] = json.load(f)
 
     P_projective = torch.tensor(FramePSMinfo["P_projective"], dtype=torch.float64)
 
@@ -126,9 +136,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             optimized_results_RFM = json.load(f)
 
             if corrected_by[0] == "c":
-                params = optimized_results_RFM[corrected_by][method][str(cities)][str(control_GCPs)]
+                params = optimized_results_RFM[corrected_by][method][str(train_GCPs)]
             else:
-                params = optimized_results_RFM[frame_path][method][str(cities)][str(control_GCPs)]
+                params = optimized_results_RFM[frame_path][method][str(train_GCPs)]
 
         if method == "gradient":
             params = torch.tensor(params, dtype=torch.float64)
@@ -175,9 +185,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             optimized_results_PSM = json.load(f)
 
             if corrected_by[0] == "c":
-                corrected_exterior_rotation = optimized_results_PSM[corrected_by][method][str(cities)][str(control_GCPs)]
+                corrected_exterior_rotation = optimized_results_PSM[corrected_by][method][str(train_GCPs)]
             else:
-                corrected_exterior_rotation = optimized_results_PSM[frame_path][method][str(cities)][str(control_GCPs)]
+                corrected_exterior_rotation = optimized_results_PSM[frame_path][method][str(train_GCPs)]
 
         original_exterior_rotation = FramePSMinfo["exterior_orientation"]
 

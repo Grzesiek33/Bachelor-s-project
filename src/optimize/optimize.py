@@ -11,13 +11,15 @@ import re
 import torch
 import numpy as np
 from src.utils.RFM_model import *
+from src.utils.cities import supported_cities
 
-def optimize_camera_parameters(correction_model = None, correction_for: str = "c1", model = "PSM", cities=None, supress_warnings=True):
+
+def optimize_camera_parameters(correction_model = None, correction_for: str = "c1", model = "PSM", train_GCPs = "all", supress_warnings=True):
     if correction_model is None:
         if model == "PSM":
-            correction_model = {"correction_function": linear, "initial_params": zero_based_initial_params("linear", 7), "optimization_function": MSE, "q_constraint": 1, "correction_function_parameters": {"linear_constraint": 1e-4, "quadratic_constraint": 1e-12, "no_parameters": 7}, "method":"gradient", "lr":1e-9, "epochs":1000}
+            correction_model = {"correction_function": linear, "initial_params": zero_based_initial_params("linear", 7), "optimization_function": MSE, "q_constraint": 1, "correction_function_parameters": {"linear_constraint": 1e-4, "quadratic_constraint": 1e-12, "no_parameters": 7}, "method": "gradient", "lr":1e-9, "epochs":1000}
         elif model == "RFM":
-            correction_model = {"correction_function": linear, "initial_params": zero_based_initial_params("linear", 80), "optimization_function": MSE, "q_constraint": 1, "correction_function_parameters": {"linear_constraint": 1, "quadratic_constraint": 1, "no_parameters": 80}, "linear_constraint": 1, "quadratic_constraint": 1, "method":"gradient", "lr":1e-5, "epochs":1000}
+            correction_model = {"correction_function": linear, "initial_params": zero_based_initial_params("linear", 80), "optimization_function": MSE, "q_constraint": 1, "correction_function_parameters": {"linear_constraint": 1, "quadratic_constraint": 1, "no_parameters": 80}, "method": "gradient", "lr":1e-5, "epochs":1000}
         else:
             raise ValueError(f"model {model} not implemented, did you mean 'PSM' or 'RFM'?")
     else:
@@ -66,32 +68,41 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
                 warnings.warn("q_constraint not specified, using 1 instead", UserWarning)
             correction_model["q_constraint"] = 1
 
-    if cities is None:
-        cities = ["San_francisco", "Angkor_wat", "Cochabamba"]
-
     GCPinfo = {}
     realGCPsposition = {}
     frameInfo = {}
 
-    for city in cities:
-        with open(f"../../{city}/own_GCPs/GCPs.json", "r") as f:
-            GCPinfo[city] = json.load(f)
+    if train_GCPs == "all":
+        cities = supported_cities
+        train_GCPs = {}
 
-        with open(f"../../{city}/own_GCPs/image_position.json", "r") as f:
-            realGCPsposition[city] = json.load(f)
+        for city in cities:
+            with open(f"../../{city}/own_GCPs/GCPs.json", "r") as f:
+                GCPinfo[city] = json.load(f)
 
-        with open(f"../../{city}/frameRPC.json", "r") as f:
-            frameInfo[city] = json.load(f)
+            with open(f"../../{city}/own_GCPs/image_position.json", "r") as f:
+                realGCPsposition[city] = json.load(f)
 
-    control_GCPs = {}
+            with open(f"../../{city}/frameRPC.json", "r") as f:
+                frameInfo[city] = json.load(f)
 
-    for city in cities:
-        control_GCPs[city] = ""
-        for cam in realGCPsposition[city]:
-            for frame in realGCPsposition[city][cam]:
-                for GCP in realGCPsposition[city][cam][frame]["GCPs"]:
-                    if realGCPsposition[city][cam][frame]["GCPs"][GCP]["control"] == 1:
-                        control_GCPs[city] += GCP + ", "
+            train_GCPs[city] = []
+            for cam in realGCPsposition[city]:
+                for frame in realGCPsposition[city][cam]:
+                    for GCP in realGCPsposition[city][cam][frame]["GCPs"]:
+                        train_GCPs[city].append(GCP)
+
+    else:
+        cities = train_GCPs.keys()
+        for city in cities:
+            with open(f"../../{city}/own_GCPs/GCPs.json", "r") as f:
+                GCPinfo[city] = json.load(f)
+
+            with open(f"../../{city}/own_GCPs/image_position.json", "r") as f:
+                realGCPsposition[city] = json.load(f)
+
+            with open(f"../../{city}/frameRPC.json", "r") as f:
+                frameInfo[city] = json.load(f)
 
     if correction_for[0] == "c":
         if model == "PSM":
@@ -128,16 +139,17 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
                             model = PSM(P_camera, P_intrinsic, q, sat_pos, numpy=False)
 
                             for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
-                                x_ecef = float(GCPinfo[ct][GCP]["x_ecef"])
-                                y_ecef = float(GCPinfo[ct][GCP]["y_ecef"])
-                                z_ecef = float(GCPinfo[ct][GCP]["z_ecef"])
+                                if GCP in train_GCPs[ct]:
+                                    x_ecef = float(GCPinfo[ct][GCP]["x_ecef"])
+                                    y_ecef = float(GCPinfo[ct][GCP]["y_ecef"])
+                                    z_ecef = float(GCPinfo[ct][GCP]["z_ecef"])
 
-                                im_x, im_y = model(x_ecef, y_ecef, z_ecef)
+                                    im_x, im_y = model(x_ecef, y_ecef, z_ecef)
 
-                                row = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["row"]
-                                col = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["col"]
+                                    row = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["row"]
+                                    col = realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["col"]
 
-                                total_error = total_error + correction_model["optimization_function"](col, row, im_x, im_y) + correction_model["q_constraint"] * ((1 - ( q[0]**2 + q[1]**2 + q[2]**2 + q[3]**2 )) ** 2)
+                                    total_error = total_error + correction_model["optimization_function"](col, row, im_x, im_y) + correction_model["q_constraint"] * ((1 - ( q[0]**2 + q[1]**2 + q[2]**2 + q[3]**2 )) ** 2)
 
                     return total_error
 
@@ -172,8 +184,7 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
                             model = PSM(P_camera, P_intrinsic, q, sat_pos, numpy=True)
 
                             for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
-                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0:
-
+                                if GCP in train_GCPs[ct]:
                                     x_ecef = float(GCPinfo[ct][GCP]["x_ecef"])
                                     y_ecef = float(GCPinfo[ct][GCP]["y_ecef"])
                                     z_ecef = float(GCPinfo[ct][GCP]["z_ecef"])
@@ -224,7 +235,7 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
                                               Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
 
                             for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
-                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0:
+                                if GCP in train_GCPs[ct]:
                                     B = float(GCPinfo[ct][GCP]["lat"])
                                     L = float(GCPinfo[ct][GCP]["lon"])
                                     H = float(GCPinfo[ct][GCP]["alt"])
@@ -273,7 +284,7 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
                                               Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
 
                             for GCP in realGCPsposition[ct][correction_for][fr]["GCPs"]:
-                                if realGCPsposition[ct][correction_for][fr]["GCPs"][GCP]["control"] == 0:
+                                if GCP in train_GCPs[ct]:
                                     B = float(GCPinfo[ct][GCP]["lat"])
                                     L = float(GCPinfo[ct][GCP]["lon"])
                                     H = float(GCPinfo[ct][GCP]["alt"])
@@ -354,12 +365,8 @@ def optimize_camera_parameters(correction_model = None, correction_for: str = "c
 
     if correction_model["method"] not in optimized_results[correction_for]:
         optimized_results[correction_for][correction_model["method"]] = {}
-    if str(cities) not in optimized_results[correction_for][correction_model["method"]]:
-        optimized_results[correction_for][correction_model["method"]][str(cities)] = {}
-    if str(control_GCPs) not in optimized_results[correction_for][correction_model["method"]][str(cities)]:
-        optimized_results[correction_for][correction_model["method"]][str(cities)][str(control_GCPs)] = {}
 
-    optimized_results[correction_for][correction_model["method"]][str(cities)][str(control_GCPs)] = optimized_params
+    optimized_results[correction_for][correction_model["method"]][str(train_GCPs)] = optimized_params
 
     with open("../../optimization/" + correction_model["correction_function"].__name__ + '_' + model + ".json", "w") as f:
      json.dump(optimized_results, f, indent=2)
@@ -371,7 +378,7 @@ if __name__ == "__main__":
 
     # only one GCP San Francisco
 
-    # optimize_camera_parameters(model = "RFM", correction_model={"correction_function": shift})
+    optimize_camera_parameters(model = "RFM", correction_model={"correction_function": shift})
     optimize_camera_parameters(model = "PSM", correction_model={"correction_function": shift})
     # optimize_camera_parameters(epochs=100, model = "RFM", correction_model=(shift, shift_initial_params_RFM))
     # optimize_camera_parameters(model = "PSM", correction_model=(shift, shift_initial_params_PSM))

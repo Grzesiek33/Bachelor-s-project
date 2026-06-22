@@ -1,0 +1,1 @@
+supported_cities = ["San_francisco", "Angkor_wat", "Cochabamba"]
