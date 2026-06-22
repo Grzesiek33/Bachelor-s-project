@@ -1,5 +1,4 @@
 import json
-import re
 from shapely import wkt
 import matplotlib
 import rasterio
