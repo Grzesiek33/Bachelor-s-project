@@ -13,7 +13,7 @@ from src.utils.RFM_model import *
 from src.utils.cities import supported_cities
 from itertools import combinations
 
-def automated_optimize(correction_model = None, correction_for = None, model = "PSM", train_set = None, supress_warnings=True):
+def automated_optimize(correction_model = None, correction_for = None, model = "PSM", train_set = None, supress_warnings=True, device=torch.device("cpu")):
 
     if correction_for is None:
         correction_for = "c1"
@@ -135,34 +135,34 @@ def optimize_camera_parameters(train_GCPs = "all", correction_model = None, mode
         if correction_model["method"] == "gradient":
 
             def objective_function(params):
-                total_error = torch.tensor(0, dtype=torch.float64)
+                total_error = torch.tensor(0, dtype=torch.float64, device=device)
                 for ct in cities:
                     for fr in realGCPsposition[ct]:
                         with open(f"../../{ct}/l1a_frames/" + fr + "_pinhole.json", "r") as f:
                             Frameinfo = json.load(f)
 
-                        P_camera = torch.tensor(Frameinfo["P_camera"], dtype=torch.float64)
-                        P_intrinsic = torch.tensor(Frameinfo["P_intrinsic"], dtype=torch.float64)
+                        P_camera = torch.tensor(Frameinfo["P_camera"], dtype=torch.float64, device=device)
+                        P_intrinsic = torch.tensor(Frameinfo["P_intrinsic"], dtype=torch.float64, device=device)
 
                         exterior_rotation = Frameinfo["exterior_orientation"]
 
                         quaternion = torch.tensor(
                             [exterior_rotation["qw_ecef"], exterior_rotation["qx_ecef"],
                              exterior_rotation["qy_ecef"],
-                             exterior_rotation["qz_ecef"]], dtype=torch.float64)
+                             exterior_rotation["qz_ecef"]], dtype=torch.float64, device=device)
 
                         sat_position = torch.tensor(
                             [exterior_rotation["x_ecef_meters"], exterior_rotation["y_ecef_meters"],
-                             exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
+                             exterior_rotation["z_ecef_meters"]], dtype=torch.float64, device=device)
 
                         correction_function = correction_model["correction_function"](torch.cat([quaternion, sat_position]),
-                                                     numpy=False, **correction_model["correction_function_parameters"])
+                                                     numpy=False, device=device, **correction_model["correction_function_parameters"])
 
                         corrected_parameters = correction_function(params)
 
                         q, sat_pos = torch.split(corrected_parameters, [4, 3])
 
-                        model = PSM(P_camera, P_intrinsic, q, sat_pos, numpy=False)
+                        model = PSM(P_camera, P_intrinsic, q, sat_pos, numpy=False, device=device)
 
                         for GCP in realGCPsposition[ct][fr]["GCPs"]:
                             if GCP in train_GCPs[ct]:
@@ -232,10 +232,10 @@ def optimize_camera_parameters(train_GCPs = "all", correction_model = None, mode
                 total_error = 0
                 for ct in cities:
                     for fr in realGCPsposition[ct]:
-                        Line_num_coeffs = torch.tensor(frameInfo[ct][fr][f"LINE_NUM_COEFFS"], dtype=torch.float64)
-                        Line_den_coeffs = torch.tensor(frameInfo[ct][fr][f"LINE_DEN_COEFFS"], dtype=torch.float64)
-                        Samp_num_coeffs = torch.tensor(frameInfo[ct][fr][f"SAMP_NUM_COEFFS"], dtype=torch.float64)
-                        Samp_den_coeffs = torch.tensor(frameInfo[ct][fr][f"SAMP_DEN_COEFFS"], dtype=torch.float64)
+                        Line_num_coeffs = torch.tensor(frameInfo[ct][fr][f"LINE_NUM_COEFFS"], dtype=torch.float64, device=device)
+                        Line_den_coeffs = torch.tensor(frameInfo[ct][fr][f"LINE_DEN_COEFFS"], dtype=torch.float64, device=device)
+                        Samp_num_coeffs = torch.tensor(frameInfo[ct][fr][f"SAMP_NUM_COEFFS"], dtype=torch.float64, device=device)
+                        Samp_den_coeffs = torch.tensor(frameInfo[ct][fr][f"SAMP_DEN_COEFFS"], dtype=torch.float64, device=device)
 
                         line_off = frameInfo[ct][fr]["LINE_OFF"]
                         samp_off = frameInfo[ct][fr]["SAMP_OFF"]
@@ -250,15 +250,15 @@ def optimize_camera_parameters(train_GCPs = "all", correction_model = None, mode
 
                         correction_function = correction_model["correction_function"](
                             torch.cat([Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs]),
-                            numpy=False, **correction_model["correction_function_parameters"])
+                            numpy=False, device=device, **correction_model["correction_function_parameters"])
 
                         corrected_parameters = correction_function(params)
 
                         Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs = torch.split(corrected_parameters, [20, 20, 20, 20])
 
-                        model = RFM_torch(lat_off, lat_scale, long_off, long_scale, height_off, height_scale,
+                        model = RFM(lat_off, lat_scale, long_off, long_scale, height_off, height_scale,
                                           line_off, line_scale, samp_off, samp_scale, Line_num_coeffs,
-                                          Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
+                                          Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs, numpy=False, device=device)
 
                         for GCP in realGCPsposition[ct][fr]["GCPs"]:
                             if GCP in train_GCPs[ct]:
@@ -305,9 +305,9 @@ def optimize_camera_parameters(train_GCPs = "all", correction_model = None, mode
 
                         Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs = corrected_parameters.reshape(4, 20)
 
-                        model = RFM_numpy(lat_off, lat_scale, long_off, long_scale, height_off, height_scale,
+                        model = RFM(lat_off, lat_scale, long_off, long_scale, height_off, height_scale,
                                           line_off, line_scale, samp_off, samp_scale, Line_num_coeffs,
-                                          Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs)
+                                          Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs, numpy=True, device=device)
 
                         for GCP in realGCPsposition[ct][fr]["GCPs"]:
                             if GCP in train_GCPs[ct]:
@@ -369,12 +369,14 @@ def optimize_camera_parameters(train_GCPs = "all", correction_model = None, mode
 
 
 if __name__ == "__main__":
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using: {device}")
 
     # only one GCP San Francisco
 
     # automated_optimize(model = "RFM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]}, correction_for=["1293562080.02321601_sc00113_c1_PAN_i0000000185"])
     # automated_optimize(model = "PSM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]}, correction_for=["1293562080.02321601_sc00113_c1_PAN_i0000000185"])
-    automated_optimize(model = "PSM", correction_model={"correction_function": rotation}, train_set={"San_francisco": [1]})
+    automated_optimize(model = "PSM", correction_model={"correction_function": rotation}, train_set={"San_francisco": [1]}, device=device)
 
     # optimize_camera_parameters(model = "RFM", correction_model={"correction_function": shift})
     # optimize_camera_parameters(model = "PSM", correction_model={"correction_function": shift})
