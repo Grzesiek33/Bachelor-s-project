@@ -99,13 +99,15 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
         with open(f"../../{ct}/own_GCPs/image_position.json", "r") as f:
             realGCPsposition[ct] = json.load(f)
 
-    P_projective = torch.tensor(FramePSMinfo["P_projective"], dtype=torch.float64)
+    if model == "both" or model == "PSM":
+        P_projective = torch.tensor(FramePSMinfo["P_projective"], dtype=torch.float64)
 
-    P_camera = torch.tensor(FramePSMinfo["P_camera"], dtype=torch.float64)
-    P_intrinsic = torch.tensor(FramePSMinfo["P_intrinsic"], dtype=torch.float64)
+        P_camera = torch.tensor(FramePSMinfo["P_camera"], dtype=torch.float64)
+        P_intrinsic = torch.tensor(FramePSMinfo["P_intrinsic"], dtype=torch.float64)
 
     if show_projected_GCPs:
-        RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
+        if(model == "both" or model == "RFM"):
+            RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                         FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                         FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
                         FrameRFMinfo["SAMP_SCALE"], torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64),
@@ -122,67 +124,70 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             L = float(meta_data["lon"])
             H = float(meta_data["alt"])
 
-            im_space = P_projective @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
-
-            im_x = im_space[0] / im_space[2]
-            im_y = im_space[1] / im_space[2]
             if model == "both" or model == "PSM":
+                im_space = P_projective @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
+
+                im_x = im_space[0] / im_space[2]
+                im_y = im_space[1] / im_space[2]
+
                 plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="x", label=f"{GCP} PSM", s=100)
 
-            im_y, im_x = RFM_model(B, L, H)
-            if model == "both" or model == "RFM":
-                plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="+", label=f"{GCP} RFM", s=100)
+            if (model == "both" or model == "RFM"):
+                im_y, im_x = RFM_model(B, L, H)
+                if model == "both" or model == "RFM":
+                    plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="+", label=f"{GCP} RFM", s=100)
 
     if show_optimized_GCPs:
-
-        with open(f"../../optimization/" + optimized_function + "_RFM.json", "r") as f:
-            optimized_results_RFM = json.load(f)
+        if model == "both" or model == "RFM":
+            with open(f"../../optimization/" + optimized_function + "_RFM.json", "r") as f:
+                optimized_results_RFM = json.load(f)
 
             params = optimized_results_RFM[method][str(train_GCPs)]
 
-        params = torch.tensor(params, dtype=torch.float64)
+            params = torch.tensor(params, dtype=torch.float64)
 
-        line_num_coeffs = torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64)
-        line_den_coeffs = torch.tensor(FrameRFMinfo["LINE_DEN_COEFFS"], dtype=torch.float64)
-        samp_num_coeffs = torch.tensor(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=torch.float64)
-        samp_den_coeffs = torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64)
-        args = torch.cat([line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs])
+            line_num_coeffs = torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64)
+            line_den_coeffs = torch.tensor(FrameRFMinfo["LINE_DEN_COEFFS"], dtype=torch.float64)
+            samp_num_coeffs = torch.tensor(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=torch.float64)
+            samp_den_coeffs = torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64)
+            args = torch.cat([line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs])
 
-        correction_function_RFM = globals()[optimized_function](args, no_parameters=80, numpy=False, linear_constraint=1)
+            correction_function_RFM = globals()[optimized_function](args, no_parameters=80, numpy=False, linear_constraint=1)
 
-        line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = torch.split(correction_function_RFM(params), [20, 20, 20, 20])
+            line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = torch.split(correction_function_RFM(params), [20, 20, 20, 20])
 
-        RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
+            RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                     FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                     FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
                     FrameRFMinfo["SAMP_SCALE"], line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs)
-        with open(f"../../optimization/" + optimized_function + "_PSM.json", "r") as f:
 
-            optimized_results_PSM = json.load(f)
+        if model == "both" or model == "PSM":
+            with open(f"../../optimization/" + optimized_function + "_PSM.json", "r") as f:
+                optimized_results_PSM = json.load(f)
 
             corrected_exterior_rotation = optimized_results_PSM[method][str(train_GCPs)]
 
-        original_exterior_rotation = FramePSMinfo["exterior_orientation"]
+            original_exterior_rotation = FramePSMinfo["exterior_orientation"]
 
-        quaternion = torch.tensor(
+            quaternion = torch.tensor(
             [original_exterior_rotation["qw_ecef"], original_exterior_rotation["qx_ecef"],
              original_exterior_rotation["qy_ecef"],
              original_exterior_rotation["qz_ecef"]], dtype=torch.float64)
 
-        sat_position = torch.tensor(
+            sat_position = torch.tensor(
             [original_exterior_rotation["x_ecef_meters"], original_exterior_rotation["y_ecef_meters"],
              original_exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
 
-        corrected_exterior_rotation = torch.tensor(corrected_exterior_rotation, dtype=torch.float64)
+            corrected_exterior_rotation = torch.tensor(corrected_exterior_rotation, dtype=torch.float64)
 
-        correction_function = globals()[optimized_function](torch.cat([quaternion, sat_position]), no_parameters=7,
+            correction_function = globals()[optimized_function](torch.cat([quaternion, sat_position]), no_parameters=7,
                                                             numpy=False, linear_constraint=1e-4)
 
-        corrected_parameters = correction_function(corrected_exterior_rotation)
+            corrected_parameters = correction_function(corrected_exterior_rotation)
 
-        quaternion, sat_position = torch.split(corrected_parameters, [4, 3])
+            quaternion, sat_position = torch.split(corrected_parameters, [4, 3])
 
-        P_extrinsic = create_extrinsic(quaternion, sat_position, numpy=False)
+            P_extrinsic = create_extrinsic(quaternion, sat_position, numpy=False)
 
         for GCP in GCPs:
 
@@ -195,16 +200,15 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                 L = float(meta_data["lon"])
                 H = float(meta_data["alt"])
 
-                im_space = P_camera @ P_intrinsic @ P_extrinsic @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
-
-                im_x = im_space[0] / im_space[2]
-                im_y = im_space[1] / im_space[2]
                 if model == "both" or model == "PSM":
+                    im_space = P_camera @ P_intrinsic @ P_extrinsic @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
+
+                    im_x = im_space[0] / im_space[2]
+                    im_y = im_space[1] / im_space[2]
                     plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="o", label=f"{GCP} (corrected position PSM)", s=100)
 
-                im_y, im_x = RFM_model(B, L, H)
-
                 if model == "both" or model == "RFM":
+                    im_y, im_x = RFM_model(B, L, H)
                     plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="*", label=f"{GCP} (corrected position RFM)", s=100)
 
     if show_real_GCPs:
@@ -232,7 +236,7 @@ if __name__ == "__main__":
     # show_GCPs_on_frame("1293562079.26564479_sc00113_c1_PAN_i0000000150", method_PSM="gradient", optimized_function="shift")
 
 
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", method="gradient", city="San_francisco", train_GCPs={"San_francisco": ["1", "3"]})
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="rotation", method="gradient", city="San_francisco", train_GCPs={"San_francisco": ["1"]}, model="PSM")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method="gradient", optimized_function="linear")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="quadratic")
 

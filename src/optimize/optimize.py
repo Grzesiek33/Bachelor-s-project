@@ -372,8 +372,9 @@ if __name__ == "__main__":
 
     # only one GCP San Francisco
 
-    automated_optimize(model = "RFM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]}, correction_for=["1293562080.02321601_sc00113_c1_PAN_i0000000185"])
-    automated_optimize(model = "PSM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]}, correction_for=["1293562080.02321601_sc00113_c1_PAN_i0000000185"])
+    # automated_optimize(model = "RFM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]}, correction_for=["1293562080.02321601_sc00113_c1_PAN_i0000000185"])
+    # automated_optimize(model = "PSM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]}, correction_for=["1293562080.02321601_sc00113_c1_PAN_i0000000185"])
+    automated_optimize(model = "PSM", correction_model={"correction_function": rotation}, train_set={"San_francisco": [1]})
 
     # optimize_camera_parameters(model = "RFM", correction_model={"correction_function": shift})
     # optimize_camera_parameters(model = "PSM", correction_model={"correction_function": shift})
@@ -390,20 +391,3 @@ if __name__ == "__main__":
     # optimize_camera_parameters(model = "RFM", correction_model=(quadratic_RFM_numpy, quadratic_initial_params_RFM))
     # optimize_camera_parameters(model = "PSM", correction_model=(quadratic_PSM_numpy, quadratic_initial_params_PSM))
 
-
-    # with open(f"../../San_francisco/own_GCPs/image_position.json", "r") as f:
-    #     realGCPsposition = json.load(f)
-    #
-    # for i in range(1, 11):
-    #
-    #     for frame in realGCPsposition["c1"]:
-    #         for GCP in realGCPsposition["c1"][frame]["GCPs"]:
-    #             if GCP == str(i):
-    #                 realGCPsposition["c1"][frame]["GCPs"][GCP]["control"] = 0
-    #             else:
-    #                 realGCPsposition["c1"][frame]["GCPs"][GCP]["control"] = 1
-    #
-    #     json.dump(realGCPsposition, open(f"../../San_francisco/own_GCPs/image_position.json", "w"), indent=2)
-    #     # optimize_camera_parameters(method="gradient", lr=5e-9, epochs=30000, model = "PSM", correction_model=(shift_PSM, shift_initial_params_PSM))
-    #     # optimize_camera_parameters(method="gradient", lr=5e-9, epochs=30000, model = "PSM", correction_model=(linear_PSM, linear_initial_params_PSM))
-    #     optimize_camera_parameters(method="gradient", lr=5e-3, epochs=1000, model = "RFM", correction_model=(shift_RFM, shift_initial_params_RFM))

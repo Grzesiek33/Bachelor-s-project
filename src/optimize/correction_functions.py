@@ -8,6 +8,8 @@ def zero_based_initial_params(correction_function, no_parameters):
         return np.zeros(no_parameters**2 + no_parameters, dtype=np.float64)
     elif correction_function == "quadratic":
         return np.zeros(no_parameters**3 + no_parameters**2 + no_parameters, dtype=np.float64)
+    elif correction_function == "rotation":
+        return np.array([1] + [0 for i in range(no_parameters-1)], dtype=np.float64)
     else:
         raise ValueError(f"Unknown initial parameters for correction function: {correction_function}")
 
@@ -59,5 +61,36 @@ def quadratic(args, no_parameters, numpy=False, linear_constraint=1e-4, quadrati
 def shift(args, **kwargs):
     def fun(params):
         return args + params
+
+    return fun
+
+def rotation(args, numpy=False, **kwargs):
+    if numpy:
+
+        w1, x1, y1, z1 = args[:4]
+
+        def fun(params):
+            w2, x2, y2, z2 = params
+
+            w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+            x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+            y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+            z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
+
+            return np.array([w, x, y, z, *args[4:]], dtype=np.float64)
+
+    else:
+        w1, x1, y1, z1 = args[..., 0], args[..., 1], args[..., 2], args[..., 3]
+
+        def fun(params):
+
+            w2, x2, y2, z2 = params[..., 0], params[..., 1], params[..., 2], params[..., 3]
+
+            w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+            x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+            y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+            z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
+
+            return torch.stack([w, x, y, z, *args[..., 4:]], dim=-1)
 
     return fun
