@@ -13,11 +13,7 @@ from src.utils.RFM_model import *
 from src.utils.cities import supported_cities
 from itertools import combinations
 
-def automated_optimize(correction_model = None, correction_for = None, model = "PSM", train_set = None, supress_warnings=True, device=torch.device("cpu")):
-
-    if correction_for is None:
-        correction_for = "c1"
-
+def automated_optimize(correction_model = None, correction_for = "c1", model = "PSM", train_set = None, supress_warnings=True, device=torch.device("cpu")):
 
     realGCPsposition = {}
     train_GCPs = {}
@@ -378,8 +374,8 @@ if __name__ == "__main__":
     # only one GCP San Francisco
 
     # automated_optimize(model = "RFM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]}, correction_for=["1293562080.02321601_sc00113_c1_PAN_i0000000185"])
-    automated_optimize(model = "PSM", correction_model={"correction_function": shift}, train_set={"San_francisco": [2]})
-    automated_optimize(model = "RFM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1]}, device=device)
+    automated_optimize(model = "PSM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1]}, device=device)
+    # automated_optimize(model = "RFM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1]}, device=device)
 
     # optimize_camera_parameters(model = "RFM", correction_model={"correction_function": shift})
     # optimize_camera_parameters(model = "PSM", correction_model={"correction_function": shift})

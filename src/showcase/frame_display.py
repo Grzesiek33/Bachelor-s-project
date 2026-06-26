@@ -18,7 +18,7 @@ from src.utils.cities import supported_cities
 
 
 def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,  optimized_function = "linear", train_GCPs = None,
-                       method: str = 'Nelder-Mead', model = "both", city="San_francisco", colors = None, correction_function_parameters = None):
+                       method: str = 'Nelder-Mead', model = "both", city="San_francisco", colors = None, device=torch.device("cpu"), correction_function_parameters_PSM = None, correction_function_parameters_RFM = None):
 
     assert model in ["PSM", "RFM", "both"], "Model must be 'PSM', 'RFM', or 'both'."
     assert os.path.exists(f"../../{city}/l1a_frames/"+frame_path+".tif"), f"Frame {frame_path} does not exist in city {city}."
@@ -41,11 +41,10 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
         plt.imshow(img_scaled, cmap="gray", origin="upper", vmin=np.percentile(img_scaled,2), vmax=np.percentile(img_scaled,98))
 
-    if correction_function_parameters is None:
-        if model == "PSM":
-            correction_function_parameters = {"linear_constraint": 1e-4, "quadratic_constraint": 1e-12, "no_parameters": 7}
-        elif model == "RFM":
-            correction_function_parameters = {"linear_constraint": 1, "quadratic_constraint": 1, "no_parameters": 80}
+    if (model == "PSM" or model == "both") and correction_function_parameters_PSM is None:
+        correction_function_parameters_PSM = {"linear_constraint": 1e-4, "quadratic_constraint": 1e-12, "no_parameters": 7}
+    if (model == "RFM" or model == "both") and correction_function_parameters_RFM is None:
+        correction_function_parameters_RFM = {"linear_constraint": 1, "quadratic_constraint": 1, "no_parameters": 80}
 
     assert os.path.exists(f"../../{city}/own_GCPs/GCPs.json"), f"GCPs data does not exist for {city}."
     with open(f"../../{city}/own_GCPs/GCPs.json", "r") as f:
@@ -94,7 +93,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
     realGCPsposition = {}
 
-    if train_GCPs == None:
+    if train_GCPs is None:
         cities = supported_cities
         train_GCPs = {}
 
@@ -128,10 +127,10 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             RFM_model = RFM(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                         FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                         FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
-                        FrameRFMinfo["SAMP_SCALE"], torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64),
-                        torch.tensor(FrameRFMinfo["LINE_DEN_COEFFS"], dtype=torch.float64),
-                        torch.tensor(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=torch.float64),
-                        torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64), numpy=False)
+                        FrameRFMinfo["SAMP_SCALE"], torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64, device=device),
+                        torch.tensor(FrameRFMinfo["LINE_DEN_COEFFS"], dtype=torch.float64, device=device),
+                        torch.tensor(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=torch.float64, device=device),
+                        torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64, device=device), numpy=False, device=device)
         for GCP in GCPs:
             meta_data = GCPinfo[GCP]
             x_ecef = float(meta_data["x_ecef"])
@@ -143,7 +142,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             H = float(meta_data["alt"])
 
             if model == "both" or model == "PSM":
-                im_space = P_projective @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
+                im_space = P_projective @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64, device=device)
 
                 im_x = im_space[0] / im_space[2]
                 im_y = im_space[1] / im_space[2]
@@ -163,27 +162,27 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                 optimized_results_RFM = json.load(f)
 
             assert method in optimized_results_RFM, f"Method {method} not found in optimized RFM results."
-            assert str(correction_function_parameters) in optimized_results_RFM[method], f"Correction function parameters {correction_function_parameters} not found in optimized RFM results for method {method}."
-            assert str(train_GCPs) in optimized_results_RFM[method][str(correction_function_parameters)], f"Train GCPs {train_GCPs} not found in optimized RFM results for method {method}."
+            assert str(correction_function_parameters_RFM) in optimized_results_RFM[method], f"Correction function parameters {correction_function_parameters_RFM} not found in optimized RFM results for method {method}."
+            assert str(train_GCPs) in optimized_results_RFM[method][str(correction_function_parameters_RFM)], f"Train GCPs {train_GCPs} not found in optimized RFM results for method {method}."
 
-            params = optimized_results_RFM[method][str(correction_function_parameters)][str(train_GCPs)]
+            params = optimized_results_RFM[method][str(correction_function_parameters_RFM)][str(train_GCPs)]
 
             params = torch.tensor(params, dtype=torch.float64)
 
-            line_num_coeffs = torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64)
-            line_den_coeffs = torch.tensor(FrameRFMinfo["LINE_DEN_COEFFS"], dtype=torch.float64)
-            samp_num_coeffs = torch.tensor(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=torch.float64)
-            samp_den_coeffs = torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64)
+            line_num_coeffs = torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64, device=device)
+            line_den_coeffs = torch.tensor(FrameRFMinfo["LINE_DEN_COEFFS"], dtype=torch.float64, device=device)
+            samp_num_coeffs = torch.tensor(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=torch.float64, device=device)
+            samp_den_coeffs = torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64, device=device)
             args = torch.cat([line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs])
 
-            correction_function_RFM = globals()[optimized_function](args, no_parameters=80, numpy=False, linear_constraint=1)
+            correction_function_RFM = globals()[optimized_function](args, numpy=False, device=device, **correction_function_parameters_RFM)
 
             line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = torch.split(correction_function_RFM(params), [20, 20, 20, 20])
 
             RFM_model = RFM(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                     FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                     FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
-                    FrameRFMinfo["SAMP_SCALE"], line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs, numpy=False)
+                    FrameRFMinfo["SAMP_SCALE"], line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs, numpy=False, device=device)
 
         if model == "both" or model == "PSM":
 
@@ -193,32 +192,32 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                 optimized_results_PSM = json.load(f)
 
             assert method in optimized_results_PSM, f"Method {method} not found in optimized PSM results."
-            assert str(correction_function_parameters) in optimized_results_PSM[method], f"Correction function parameters {correction_function_parameters} not found in optimized PSM results for method {method}."
-            assert str(train_GCPs) in optimized_results_PSM[method][str(correction_function_parameters)], f"Train GCPs {train_GCPs} not found in optimized PSM results for method {method}."
+            assert str(correction_function_parameters_PSM) in optimized_results_PSM[method], f"Correction function parameters {correction_function_parameters_PSM} not found in optimized PSM results for method {method}."
+            assert str(train_GCPs) in optimized_results_PSM[method][str(correction_function_parameters_PSM)], f"Train GCPs {train_GCPs} not found in optimized PSM results for method {method}."
 
-            corrected_exterior_rotation = optimized_results_PSM[method][str(correction_function_parameters)][str(train_GCPs)]
+            corrected_exterior_rotation = optimized_results_PSM[method][str(correction_function_parameters_PSM)][str(train_GCPs)]
 
             original_exterior_rotation = FramePSMinfo["exterior_orientation"]
 
             quaternion = torch.tensor(
             [original_exterior_rotation["qw_ecef"], original_exterior_rotation["qx_ecef"],
              original_exterior_rotation["qy_ecef"],
-             original_exterior_rotation["qz_ecef"]], dtype=torch.float64)
+             original_exterior_rotation["qz_ecef"]], dtype=torch.float64, device=device)
 
             sat_position = torch.tensor(
             [original_exterior_rotation["x_ecef_meters"], original_exterior_rotation["y_ecef_meters"],
-             original_exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
+             original_exterior_rotation["z_ecef_meters"]], dtype=torch.float64, device=device)
 
-            corrected_exterior_rotation = torch.tensor(corrected_exterior_rotation, dtype=torch.float64)
+            corrected_exterior_rotation = torch.tensor(corrected_exterior_rotation, dtype=torch.float64, device=device)
 
-            correction_function = globals()[optimized_function](torch.cat([quaternion, sat_position]), no_parameters=7,
-                                                            numpy=False, linear_constraint=1e-4)
+            correction_function = globals()[optimized_function](torch.cat([quaternion, sat_position]),
+                                                            numpy=False, **correction_function_parameters_PSM, device=device)
 
             corrected_parameters = correction_function(corrected_exterior_rotation)
 
             quaternion, sat_position = torch.split(corrected_parameters, [4, 3])
 
-            P_extrinsic = create_extrinsic(quaternion, sat_position, numpy=False)
+            P_extrinsic = create_extrinsic(quaternion, sat_position, numpy=False, device=device)
 
         for GCP in GCPs:
 
@@ -232,7 +231,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                 H = float(meta_data["alt"])
 
                 if model == "both" or model == "PSM":
-                    im_space = P_camera @ P_intrinsic @ P_extrinsic @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64)
+                    im_space = P_camera @ P_intrinsic @ P_extrinsic @ torch.tensor([x_ecef, y_ecef, z_ecef, 1], dtype=torch.float64, device=device)
 
                     im_x = im_space[0] / im_space[2]
                     im_y = im_space[1] / im_space[2]
@@ -267,7 +266,7 @@ if __name__ == "__main__":
     # show_GCPs_on_frame("1293562079.26564479_sc00113_c1_PAN_i0000000150", method_PSM="gradient", optimized_function="shift")
 
 
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", method="gradient", city="San_francisco", train_GCPs={"San_francisco": ["1"]}, model="RFM")
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", method="gradient", city="San_francisco", train_GCPs={"San_francisco": ["1"]}, model="both")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method="gradient", optimized_function="linear")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="quadratic")
 

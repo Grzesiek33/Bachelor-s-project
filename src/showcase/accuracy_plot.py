@@ -16,9 +16,9 @@ from src.utils.cities import *
 import torch
 
 
-def makeAccuracyPlot(no_eval_GCPs, optimized_function = linear, method: str = 'gradient', model = "PSM", city="San_francisco", eval_on_trained = False, camera = "c1", correction_function_parameters=None):
+def makeAccuracyPlot(no_eval_GCPs, optimized_function = linear, method: str = 'gradient', model = "PSM", city="San_francisco", correction_for="c1", device=torch.device("cpu"), eval_on_trained = False, correction_function_parameters=None):
 
-    assert model in ["PSM", "RFM", "both"], "Model must be 'PSM' or 'RFM'"
+    assert model in ["PSM", "RFM"], "Model must be 'PSM' or 'RFM'"
 
     if correction_function_parameters is None:
         if model == "PSM":
@@ -61,7 +61,7 @@ def makeAccuracyPlot(no_eval_GCPs, optimized_function = linear, method: str = 'g
 
     for i, comb in enumerate(combinations(allGCPs[city], no_eval_GCPs)):
 
-        params = torch.tensor(optim[method][str(correction_function_parameters)][str({city: list(comb)})], dtype=torch.float64)
+        params = torch.tensor(optim[method][str(correction_function_parameters)][str({city: list(comb)})], dtype=torch.float64, device=device)
 
         error.append([])
         error_m.append([])
@@ -73,40 +73,40 @@ def makeAccuracyPlot(no_eval_GCPs, optimized_function = linear, method: str = 'g
 
         for frame in realGCPsposition:
 
-            if frame.split("_")[2] != camera:
+            if not (correction_for == "all" or (correction_for[0] == "c" and frame.split("_")[2] == correction_for) or (frame in correction_for)):
                 continue
 
             if model == "PSM":
                 with open(f"../../San_francisco/l1a_frames/" + frame + "_pinhole.json", "r") as f:
                     FramePSMinfo = json.load(f)
 
-                P_camera = torch.tensor(FramePSMinfo["P_camera"], dtype=torch.float64)
-                P_intrinsic = torch.tensor(FramePSMinfo["P_intrinsic"], dtype=torch.float64)
+                P_camera = torch.tensor(FramePSMinfo["P_camera"], dtype=torch.float64, device=device)
+                P_intrinsic = torch.tensor(FramePSMinfo["P_intrinsic"], dtype=torch.float64, device=device)
 
                 exterior_rotation = FramePSMinfo["exterior_orientation"]
 
                 quaternion = torch.tensor(
                     [exterior_rotation["qw_ecef"], exterior_rotation["qx_ecef"],
                      exterior_rotation["qy_ecef"],
-                     exterior_rotation["qz_ecef"]], dtype=torch.float64)
+                     exterior_rotation["qz_ecef"]], dtype=torch.float64, device=device)
 
                 sat_position = torch.tensor(
                     [exterior_rotation["x_ecef_meters"], exterior_rotation["y_ecef_meters"],
-                     exterior_rotation["z_ecef_meters"]], dtype=torch.float64)
+                     exterior_rotation["z_ecef_meters"]], dtype=torch.float64, device=device)
 
-                correction_function = optimized_function(torch.cat([quaternion, sat_position]), numpy=False, **correction_function_parameters)
+                correction_function = optimized_function(torch.cat([quaternion, sat_position]), numpy=False, **correction_function_parameters, device=device)
 
                 corrected_parameters = correction_function(params)
 
                 q, sat_pos = torch.split(corrected_parameters, [4, 3])
 
-                model_eval = PSM(P_camera, P_intrinsic, q, sat_pos, numpy=False)
+                model_eval = PSM(P_camera, P_intrinsic, q, sat_pos, numpy=False, device=device)
 
             else:
-                Line_num_coeffs = torch.tensor(frameInfo[frame][f"LINE_NUM_COEFFS"], dtype=torch.float64)
-                Line_den_coeffs = torch.tensor(frameInfo[frame][f"LINE_DEN_COEFFS"], dtype=torch.float64)
-                Samp_num_coeffs = torch.tensor(frameInfo[frame][f"SAMP_NUM_COEFFS"], dtype=torch.float64)
-                Samp_den_coeffs = torch.tensor(frameInfo[frame][f"SAMP_DEN_COEFFS"], dtype=torch.float64)
+                Line_num_coeffs = torch.tensor(frameInfo[frame][f"LINE_NUM_COEFFS"], dtype=torch.float64, device=device)
+                Line_den_coeffs = torch.tensor(frameInfo[frame][f"LINE_DEN_COEFFS"], dtype=torch.float64, device=device)
+                Samp_num_coeffs = torch.tensor(frameInfo[frame][f"SAMP_NUM_COEFFS"], dtype=torch.float64, device=device)
+                Samp_den_coeffs = torch.tensor(frameInfo[frame][f"SAMP_DEN_COEFFS"], dtype=torch.float64, device=device)
 
                 line_off = frameInfo[frame]["LINE_OFF"]
                 samp_off = frameInfo[frame]["SAMP_OFF"]
@@ -120,7 +120,7 @@ def makeAccuracyPlot(no_eval_GCPs, optimized_function = linear, method: str = 'g
                 height_scale = frameInfo[frame]["HEIGHT_SCALE"]
 
                 correction_function = optimized_function(torch.cat([Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs]),
-                    numpy=False, **correction_function_parameters)
+                    numpy=False, **correction_function_parameters, device=device)
 
                 corrected_parameters = correction_function(params)
 
@@ -129,7 +129,7 @@ def makeAccuracyPlot(no_eval_GCPs, optimized_function = linear, method: str = 'g
 
                 model_eval = RFM(lat_off, lat_scale, long_off, long_scale, height_off, height_scale,
                             line_off, line_scale, samp_off, samp_scale, Line_num_coeffs,
-                            Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs, numpy=False)
+                            Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs, numpy=False, device=device)
 
             for GCP in list(set(realGCPsposition[frame]["GCPs"]) - set(comb)) if not eval_on_trained else realGCPsposition[frame]["GCPs"]:
 
@@ -138,18 +138,15 @@ def makeAccuracyPlot(no_eval_GCPs, optimized_function = linear, method: str = 'g
                     x_ecef = float(meta_data["x_ecef"])
                     y_ecef = float(meta_data["y_ecef"])
                     z_ecef = float(meta_data["z_ecef"])
+                    im_x, im_y = model_eval(x_ecef, y_ecef, z_ecef)
                 else:
                     B = float(meta_data["lat"])
                     L = float(meta_data["lon"])
                     H = float(meta_data["alt"])
+                    im_x, im_y = model_eval(B, L, H)
 
                 real_im_x = realGCPsposition[frame]["GCPs"][GCP]["col"]
                 real_im_y = realGCPsposition[frame]["GCPs"][GCP]["row"]
-
-                if model == "PSM":
-                    im_x, im_y = model_eval(x_ecef, y_ecef, z_ecef)
-                else:
-                    im_x, im_y = model_eval(B, L, H)
 
                 error[i].append(np.sqrt((im_x.item() - real_im_x) ** 2 + (im_y.item() - real_im_y) ** 2))
                 error_m[i].append(error[i][-1] * realGCPsposition[frame]["GSD"])
