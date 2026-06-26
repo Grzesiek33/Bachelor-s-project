@@ -5,8 +5,8 @@ from scipy.optimize import minimize
 import json
 
 from src.utils.PSM_model import *
-from correction_functions import *
-from optimization_function import MSE
+from src.optimize.correction_functions import *
+from src.optimize.optimization_functions import MSE
 import torch
 import numpy as np
 from src.utils.RFM_model import *
@@ -370,8 +370,6 @@ def optimize_camera_parameters(train_GCPs = "all", correction_model = None, mode
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using: {device}")
-
-    # only one GCP San Francisco
 
     # automated_optimize(model = "RFM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]}, correction_for=["1293562080.02321601_sc00113_c1_PAN_i0000000185"])
     automated_optimize(model = "PSM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1]}, device=device)

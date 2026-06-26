@@ -18,7 +18,7 @@ from src.utils.cities import supported_cities
 
 
 def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,  optimized_function = "linear", train_GCPs = None,
-                       method: str = 'Nelder-Mead', model = "both", city="San_francisco", colors = None, device=torch.device("cpu"), correction_function_parameters_PSM = None, correction_function_parameters_RFM = None):
+                       method: str = 'gradient', model = "both", city="San_francisco", colors = None, device=torch.device("cpu"), correction_function_parameters_PSM = None, correction_function_parameters_RFM = None):
 
     assert model in ["PSM", "RFM", "both"], "Model must be 'PSM', 'RFM', or 'both'."
     assert os.path.exists(f"../../{city}/l1a_frames/"+frame_path+".tif"), f"Frame {frame_path} does not exist in city {city}."
@@ -261,7 +261,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
 if __name__ == "__main__":
 
-    # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", show_real_GCPs=False, show_optimized_GCPs=False, show_projected_GCPs=False, city="Cochabamba")
+    # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", show_real_GCPs=False, show_optimized_GCPs=False, show_projected_GCPs=False, city="Cocabamba")
 
     # show_GCPs_on_frame("1293562079.26564479_sc00113_c1_PAN_i0000000150", method_PSM="gradient", optimized_function="shift")
 
@@ -277,6 +277,6 @@ if __name__ == "__main__":
     # show_GCPs_on_frame("1291951336.19337702_sc00103_c1_PAN_i0000000100", method_PSM="gradient", optimized_function="linear", city="Angkor_wat")
     # show_GCPs_on_frame("1291951336.19337702_sc00103_c1_PAN_i0000000100", method_PSM="gradient", optimized_function="quadratic", city="Angkor_wat")
 
-    # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", method_PSM="gradient", optimized_function="shift", city="Cochabamba")
-    # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", method_PSM="gradient", optimized_function="linear", city="Cochabamba")
-    # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", method_PSM="gradient", optimized_function="quadratic", city="Cochabamba")
+    # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", method_PSM="gradient", optimized_function="shift", city="Cocabamba")
+    # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", method_PSM="gradient", optimized_function="linear", city="Cocabamba")
+    # show_GCPs_on_frame("1293376734.34837317_sc00113_c1_PAN_i0000000200", method_PSM="gradient", optimized_function="quadratic", city="Cocabamba")

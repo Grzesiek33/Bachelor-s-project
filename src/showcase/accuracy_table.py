@@ -17,7 +17,7 @@ import torch
 from src.utils.cities import supported_cities
 
 
-def makeAccuracyTable(optimized_function = "shift", cities = None, train_GCPs: dict = None, method: str = 'Nelder-Mead', correction_for="c1", device=torch.device("cpu"), correction_function_parameters_PSM=None, correction_function_parameters_RFM=None):
+def accuracy_table(optimized_function ="shift", cities = None, train_GCPs: dict = None, method: str = 'Nelder-Mead', correction_for="c1", device=torch.device("cpu"), correction_function_parameters_PSM=None, correction_function_parameters_RFM=None):
 
     if cities is None:
         cities = supported_cities
@@ -323,4 +323,4 @@ def makeAccuracyTable(optimized_function = "shift", cities = None, train_GCPs: d
 
 if __name__ == "__main__":
 
-    makeAccuracyTable(method="gradient", train_GCPs={"San_francisco": ["1"]})
+    accuracy_table(method="gradient", train_GCPs={"San_francisco": ["1"]})

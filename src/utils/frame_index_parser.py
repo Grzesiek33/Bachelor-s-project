@@ -6,7 +6,7 @@ city = "San_francisco"
 def Parse_GSDs(cites = None):
 
     if cites is None:
-        cites = ["San_francisco", "Angkor_wat", "Cochabamba"]
+        cites = ["San_francisco", "Angkor_wat", "Cocabamba"]
 
     for city in cites:
         with open(f"../../{city}/own_GCPs/image_position.json", "r", encoding="utf-8") as f:

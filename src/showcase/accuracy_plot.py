@@ -16,7 +16,7 @@ from src.utils.cities import *
 import torch
 
 
-def makeAccuracyPlot(no_eval_GCPs, optimized_function = linear, method: str = 'gradient', model = "PSM", city="San_francisco", correction_for="c1", device=torch.device("cpu"), eval_on_trained = False, correction_function_parameters=None):
+def accuracy_plot(no_eval_GCPs, optimized_function = linear, method: str = 'gradient', model ="PSM", city="San_francisco", correction_for="c1", device=torch.device("cpu"), eval_on_trained = False, correction_function_parameters=None):
 
     assert model in ["PSM", "RFM"], "Model must be 'PSM' or 'RFM'"
 
@@ -153,7 +153,7 @@ def makeAccuracyPlot(no_eval_GCPs, optimized_function = linear, method: str = 'g
         error_m[-1] = np.mean(error_m[-1])
 
     plt.plot(GCPs, error_m, marker="o")
-    plt.xlabel("GCP used for optimization")
+    plt.xlabel("GCPs used for optimization")
     plt.ylabel("Mean error (meters)")
     plt.title(f"Accuracy for {model} using {optimized_function.__name__} correction")
 
@@ -161,4 +161,4 @@ def makeAccuracyPlot(no_eval_GCPs, optimized_function = linear, method: str = 'g
     plt.show()
 
 if __name__ == "__main__":
-    makeAccuracyPlot(no_eval_GCPs=1, optimized_function=shift, model="RFM")
+    accuracy_plot(no_eval_GCPs=1, optimized_function=shift, model="RFM")
