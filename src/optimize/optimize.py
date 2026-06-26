@@ -480,6 +480,9 @@ def optimize_camera_parameters(train_GCPs = "all", correction_model = None, mode
 
         optimized_params = [p.tolist() for p in params]
 
+    if not os.path.exists("../../optimization/"):
+        os.makedirs("../../optimization/")
+
     if not os.path.exists("../../optimization/" + correction_model["correction_function"].__name__ + '_' + model + ".json"):
         with open("../../optimization/" + correction_model["correction_function"].__name__ + '_' + model +  ".json", "w") as f:
             f.write("{}")
