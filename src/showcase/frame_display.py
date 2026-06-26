@@ -17,9 +17,105 @@ import torch
 from src.utils.cities import supported_cities
 
 
-def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,  optimized_function = "linear", train_GCPs = None,
+def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,  optimized_function = linear, train_GCPs = None,
                        method: str = 'gradient', model = "both", city="San_francisco", colors = None, device=torch.device("cpu"), correction_function_parameters_PSM = None, correction_function_parameters_RFM = None):
+    """
+    Display ground control points (GCPs) on a single image frame, comparing projected,
+    optimized and real image positions.
 
+    This function loads a single-band TIFF frame and overlays GCP positions computed
+    from the physical sensor model (PSM), the rational function model (RFM),
+    their optimized/corrected variants, and the real annotated image positions.
+    It is intended for visual inspection of projection/correction quality across
+    different optimization methods and correction functions.
+
+    Parameters
+    ----------
+    frame_path : str
+        Base filename (without extension) of the frame inside "../../{city}/l1a_frames/".
+        Example: "1293562080.02321601_sc00113_c1_PAN_i0000000185".
+    show_projected_GCPs : bool, optional
+        If True, plot GCP positions projected by the original PSM and RFM models.
+        Default True.
+    show_optimized_GCPs : bool, optional
+        If True, plot GCP positions after applying optimized correction parameters
+        (loaded from the `../../optimization/` JSON files). Default True.
+    show_real_GCPs : bool, optional
+        If True, plot the real GCP image positions from
+        "../../{city}/own_GCPs/image_position.json". Default True.
+    optimized_function : callable, optional
+        Correction function used to optimize the camera model.
+        Default linear.
+    train_GCPs : dict or None, optional
+        Mapping of city -> list of GCP identifiers used during optimization (the
+        "training" GCPs). If None, the function will build a train list from all
+        supported cities. Default None.
+    method : str, optional
+        Optimization method key used to find results in optimization JSON files
+        (e.g. "gradient", "Nelder-Mead"). Default 'gradient'.
+    model : {'PSM', 'RFM', 'both'}, optional
+        Which model(s) to evaluate and plot: only PSM, only RFM, or both.
+        Default "both".
+    city : str, optional
+        City containing the frame to display.
+        Default "San_francisco".
+    colors : list or None, optional
+        Optional list of color strings/hex codes to use for plotting each distinct
+        GCP. If None a default palette is chosen. Must have at least as many
+        entries as distinct GCPs (otherwise a ValueError is raised).
+    device : torch.device, optional
+        PyTorch device used when constructing tensors and models (e.g. CPU or CUDA).
+        Default: torch.device("cpu").
+    correction_function_parameters_PSM : dict or None, optional
+        Parameters passed to the PSM correction function constructor. If None,
+        sensible defaults are used: {"linear_constraint": 1e-4,
+        "quadratic_constraint": 1e-12, "no_parameters": 7}.
+    correction_function_parameters_RFM : dict or None, optional
+        Parameters passed to the RFM correction function constructor. If None,
+        sensible defaults are used: {"linear_constraint": 1,
+        "quadratic_constraint": 1, "no_parameters": 80}.
+
+    Raises
+    ------
+    AssertionError
+        If required files (frame TIFF, PSM/RFM metadata, GCP JSONs, optimization
+        JSONs) or required keys inside those files are missing. Also raised if the
+        provided `colors` list is too short for the number of GCPs.
+    ValueError
+        If `colors` is provided but has fewer entries than the number of GCPs.
+
+    Behavior / Side effects
+    -----------------------
+    - Loads the frame TIFF as a single-band image and scales it for display.
+    - Reads PSM metadata from "../../{city}/l1a_frames/{frame_path}_pinhole.json".
+    - Reads RFM model metadata from "../../{city}/frameRPC.json".
+    - Reads GCP metadata from "../../{city}/own_GCPs/GCPs.json" and image positions
+      from "../../{city}/own_GCPs/image_position.json".
+    - If `show_optimized_GCPs` is True, loads optimized parameters from files in
+      "../../optimization/" named "{optimized_function}_PSM.json" and
+      "{optimized_function}_RFM.json" and reconstructs corrected models.
+    - Plots:
+        - Projected PSM positions (marker "x") and RFM positions (marker "+").
+        - Optimized/corrected PSM positions (marker "o") and RFM positions (marker "*").
+        - Real annotated GCP positions (marker "v" if used in training, "^" if control).
+    - Shows a legend and blocks until the Matplotlib window is closed.
+
+    Returns
+    -------
+    None
+        The function produces an interactive Matplotlib figure and returns None.
+
+    Example
+    -------
+    show_GCPs_on_frame(
+        "1293562080.02321601_sc00113_c1_PAN_i0000000185",
+        optimized_function="shift",
+        method="gradient",
+        city="San_francisco",
+        train_GCPs={"San_francisco": ["1"]},
+        model="both"
+    )
+    """
     assert model in ["PSM", "RFM", "both"], "Model must be 'PSM', 'RFM', or 'both'."
     assert os.path.exists(f"../../{city}/l1a_frames/"+frame_path+".tif"), f"Frame {frame_path} does not exist in city {city}."
 
@@ -157,8 +253,8 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
     if show_optimized_GCPs:
         if model == "both" or model == "RFM":
 
-            assert os.path.exists(f"../../optimization/" + optimized_function + "_RFM.json"), f"Optimized RFM parameters for function {optimized_function} do not exist."
-            with open(f"../../optimization/" + optimized_function + "_RFM.json", "r") as f:
+            assert os.path.exists(f"../../optimization/" + optimized_function.__name__ + "_RFM.json"), f"Optimized RFM parameters for function {optimized_function} do not exist."
+            with open(f"../../optimization/" + optimized_function.__name__ + "_RFM.json", "r") as f:
                 optimized_results_RFM = json.load(f)
 
             assert method in optimized_results_RFM, f"Method {method} not found in optimized RFM results."
@@ -175,7 +271,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
             samp_den_coeffs = torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64, device=device)
             args = torch.cat([line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs])
 
-            correction_function_RFM = globals()[optimized_function](args, numpy=False, device=device, **correction_function_parameters_RFM)
+            correction_function_RFM = optimized_function(args, numpy=False, device=device, **correction_function_parameters_RFM)
 
             line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = torch.split(correction_function_RFM(params), [20, 20, 20, 20])
 
@@ -186,9 +282,9 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
         if model == "both" or model == "PSM":
 
-            assert os.path.exists(f"../../optimization/" + optimized_function + "_PSM.json"), f"Optimized PSM parameters for function {optimized_function} do not exist."
+            assert os.path.exists(f"../../optimization/" + optimized_function.__name__ + "_PSM.json"), f"Optimized PSM parameters for function {optimized_function} do not exist."
 
-            with open(f"../../optimization/" + optimized_function + "_PSM.json", "r") as f:
+            with open(f"../../optimization/" + optimized_function.__name__ + "_PSM.json", "r") as f:
                 optimized_results_PSM = json.load(f)
 
             assert method in optimized_results_PSM, f"Method {method} not found in optimized PSM results."
@@ -210,7 +306,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
             corrected_exterior_rotation = torch.tensor(corrected_exterior_rotation, dtype=torch.float64, device=device)
 
-            correction_function = globals()[optimized_function](torch.cat([quaternion, sat_position]),
+            correction_function = optimized_function(torch.cat([quaternion, sat_position]),
                                                             numpy=False, **correction_function_parameters_PSM, device=device)
 
             corrected_parameters = correction_function(corrected_exterior_rotation)
@@ -256,7 +352,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
     plt.tight_layout()
     plt.subplots_adjust(right=0.7)
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=20)
-    plt.title(f"corrected {optimized_function} function with {method} method", fontsize=20)
+    plt.title(f"corrected {optimized_function.__name__} function with {method} method", fontsize=20)
     plt.show()
 
 if __name__ == "__main__":
@@ -266,7 +362,7 @@ if __name__ == "__main__":
     # show_GCPs_on_frame("1293562079.26564479_sc00113_c1_PAN_i0000000150", method_PSM="gradient", optimized_function="shift")
 
 
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", method="gradient", city="San_francisco", train_GCPs={"San_francisco": ["1"]}, model="both")
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function=shift, method="gradient", city="San_francisco", train_GCPs={"San_francisco": ["1"]}, model="both")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method="gradient", optimized_function="linear")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="quadratic")
 

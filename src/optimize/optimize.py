@@ -14,7 +14,100 @@ from src.utils.cities import supported_cities
 from itertools import combinations
 
 def automated_optimize(correction_model = None, correction_for = "c1", model = "PSM", train_set = None, supress_warnings=True, device=torch.device("cpu")):
+    """Automatically optimize camera parameters across multiple training set combinations.
 
+        This function orchestrates the optimization process by generating combinations of ground control points (GCPs)
+        and calling optimize_camera_parameters for each combination. It automates the process of testing different
+        subsets of GCPs to find optimal correction model parameters.
+
+        Parameters
+        ----------
+        correction_model : dict, optional
+            Dictionary describing the correction model and optimization settings (same structure as in optimize_camera_parameters).
+            If None, default parameters are used. Expected keys include: "correction_function", "initial_params",
+            "optimization_function", "method", "epochs", "lr", "q_constraint", and "correction_function_parameters".
+            Default: None
+
+        correction_for : str, optional
+            Filter for frame selection. Controls which frames' GCPs are included in training:
+            - "all": includes all frames from all cities
+            - "c1", "c2", "c3": includes only frames where the camera identifier matches (e.g., "c1" for camera 1)
+            - frame identifiers - list of strings: includes only frames whose names match the provided list of frame identifiers
+            Default: "c1"
+
+        model : {"PSM", "RFM"}, optional
+            The camera model to optimize.
+            - "PSM": Physical Sensor Model (optimizes quaternion and satellite position)
+            - "RFM": Rational Function Model (optimizes RFM polynomial coefficients)
+            Default: "PSM"
+
+        train_set : dict or None, optional
+            Dictionary mapping city names to lists of combination sizes to generate.
+            Example: {"San_francisco": [1, 2], "Cocabamba": [1]} will test all combinations of size 1 and 2 for San Francisco,
+            and all combinations of size 1 for Cocabamba.
+            If None (default), all combinations of single GCPs for each city are generated and tested.
+
+        supress_warnings : bool, optional
+            If True, suppresses warnings when default values are used for missing correction_model entries.
+            If False, warnings are issued for missing parameters.
+            Default: True
+
+        device : torch.device, optional
+            PyTorch device for computations (e.g., torch.device("cpu") or torch.device("cuda")).
+            Used when gradient-based optimization is selected.
+            Default: torch.device("cpu")
+
+        Behavior
+        --------
+        1. Loads GCP position data from all supported cities' own_GCPs/image_position.json files
+        2. Filters GCPs based on the correction_for parameter (all frames, specific camera, or specific frame)
+        3. Generates the train_set dictionary if not provided (all combinations of size 1 for each city)
+        4. For each city and each combination size in train_set:
+           - Generates all possible combinations of GCPs of that size
+           - Calls optimize_camera_parameters for each combination
+           - Results are saved to ../../optimization/{correction_function_name}_{model}.json
+
+        Returns
+        -------
+        None
+            Results are saved to the optimization JSON file. A completion message is printed by optimize_camera_parameters
+            for each combination processed.
+
+        Raises
+        ------
+        ValueError
+            If an unsupported model is provided (raised by optimize_camera_parameters).
+        FileNotFoundError
+            If required GCP position JSON files cannot be found.
+
+        Examples
+        --------
+        Optimize PSM using shift correction, testing all combinations of size 1 for San Francisco:
+        automated_optimize(
+             correction_model={"correction_function": shift},
+             model="PSM",
+             train_set={"San_francisco": [1]},
+             device=torch.device("cpu")
+             )
+
+        Optimize RFM using linear correction for all camera 1 frames, testing combinations of sizes 1-3:
+         automated_optimize(
+             correction_model={"correction_function": linear},
+             correction_for="c1",
+             model="RFM",
+             train_set={"San_francisco": [1, 2, 3], "Cocabamba": [1, 2, 3]},
+             device=torch.device("cuda")
+             )
+
+        Optimize PSM for a specific frame, testing all combination sizes:
+         automated_optimize(
+             correction_model={"correction_function": shift},
+             correction_for=["1293562080.02321601_sc00113_c1_PAN_i0000000185"],
+             model="PSM",
+             train_set=None  # All combinations will be generated
+             )
+
+        """
     realGCPsposition = {}
     train_GCPs = {}
 
@@ -33,7 +126,7 @@ def automated_optimize(correction_model = None, correction_for = "c1", model = "
 
 
     if train_set is None:
-        train_set = {city: [i for i in range(1, len(train_GCPs[city])+1)] for city in supported_cities}
+        train_set = {city: [1] for city in supported_cities}
 
     for city in train_set:
         for i in train_set[city]:
@@ -41,6 +134,47 @@ def automated_optimize(correction_model = None, correction_for = "c1", model = "
                 optimize_camera_parameters({city: list(comb)}, correction_model, model, supress_warnings, device=device)
 
 def optimize_camera_parameters(train_GCPs = "all", correction_model = None, model = "PSM", supress_warnings=True, device=torch.device("cpu")):
+    """Optimize camera parameters using ground control points (GCPs) and a correction function.
+    This function fits a correction model that adjusts model coefficients so that projected image coordinates of known ground control points match their measured image coordinates. It supports two underlying models:
+    "PSM" (physical sensor model): optimizes a quaternion (camera rotation) and satellite position using the provided correction function. A soft constraint on the quaternion norm may be added to the loss (via q_constraint).
+    "RFM" (rational function model): optimizes the RFM polynomial coefficients (four 20-coefficient vectors by default) using the provided correction function.
+
+    Parameters
+    train_GCPs : "all" or dict, optional
+    If "all" (default), all GCPs from all supported cities (as listed in src.utils.cities.supported_cities) are used for training. If a dict is provided, it must map city names to lists of GCP identifiers (strings) to use for training. Example: {"San_francisco": ["1", "7"], "Cocabamba": ["3"]}.
+    correction_model : dict, optional
+    Dictionary describing the correction model and optimization settings. Expected keys: - "correction_function": a callable factory that, given current frame parameters (quaternion + sat position for PSM, or RFM coeffs and RPC for RFM), returns a function that maps optimization parameters -> corrected parameters. Both a PyTorch (differentiable) and a NumPy variant are supported; which is used depends on the chosen optimization method. - "initial_params": initial parameter vector for optimization (NumPy array or list). - "optimization_function": callable loss function taking (col, row, im_x, im_y) and returning a scalar error (default: MSE). - "correction_function_parameters": dict of extra kwargs passed to the correction function factory (e.g. constraints, number of parameters). - "method": optimization method. If "gradient", PyTorch's optimizer (Adam) is used and the code expects differentiable (torch) correction functions. Otherwise any supported scipy method (e.g. "Nelder-Mead", "Powell", "CG", "BFGS", "L-BFGS-B", "TNC", "COBYLA", "SLSQP") is allowed and NumPy-based correction functions are used. - "epochs": number of gradient steps (or max iterations for scipy). - "lr": learning rate for gradient optimization. - "q_constraint": (PSM only) float weight for the quaternion unit-length soft constraint.
+    model : {"PSM", "RFM"}, optional
+    Which model to optimize. Default is "PSM".
+    supress_warnings : bool, optional
+    If False, the function will warn when default values are used for missing correction_model entries. Default True.
+    device : torch.device, optional Device for PyTorch computations when using gradient-based optimization (e.g. torch.device("cpu") or CUDA device).
+
+    Behavior
+    Loads GCP data, measured image positions, and per-frame parameters from each city's own_GCPs and frameRPC.json and frame pinhole JSON files.
+    Constructs an objective function that:
+    for each training GCP in each frame, projects the ground coordinates using the current model parameters (PSM or RFM) after they are adjusted by the correction function,
+    computes the error with optimization_function and accumulates it.
+    for PSM, a quaternion norm penalty is added if q_constraint is present.
+    Writes optimization results to a JSON file at: ../../optimization/{correction_function.__name__}_{model}.json. The JSON structure is keyed by optimization method, stringified correction_function_parameters and stringified train_GCPs, with the stored value being the optimized parameter vector.
+    Returns
+    None
+    Results are saved to the optimization JSON file and a completion message is printed.
+    Raises
+    ValueError If an unsupported model or unsupported/non-listed method is provided.
+
+    Examples
+    Use gradient optimization to fit a small shift correction for PSM:
+
+    opt = {"correction_function": shift, "initial_params": shift_initial_params_PSM, "method": "gradient", "epochs": 1000, "lr": 1e-9}
+    optimize_camera_parameters(train_GCPs="all", correction_model=opt, model="PSM", device=torch.device("cpu"))
+
+    Use scipy Nelder-Mead to fit linear correction for RFM on a specific city subset:
+    opt = {"correction_function": linear, "initial_params": linear_initial_params_RFM, "method": "Nelder-Mead", "epochs": 2000}
+    optimize_camera_parameters(train_GCPs={"San_francisco": ["1","2"]}, correction_model=opt, model="RFM")
+
+    """
+
     if correction_model is None:
         if model == "PSM":
             correction_model = {"correction_function": linear, "initial_params": zero_based_initial_params("linear", 7), "optimization_function": MSE, "q_constraint": 1, "correction_function_parameters": {"linear_constraint": 1e-4, "quadratic_constraint": 1e-12, "no_parameters": 7}, "method": "gradient", "lr":1e-9, "epochs":1000}

@@ -16,10 +16,10 @@ if __name__ == "__main__":
     optimize_camera_parameters(model="RFM", correction_model={"correction_function": linear}, train_GCPs={"San_francisco": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]})
 
     # Show GCPs on a specific frame in San Francisco using the optimized shift correction function for the PSM model
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", city="San_francisco", train_GCPs={"San_francisco": ["1"]}, model="PSM")
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function=shift, city="San_francisco", train_GCPs={"San_francisco": ["1"]}, model="PSM")
 
     # Show GCPs on a specific frame in San Francisco using the optimized linear correction function for the RFM model
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="linear", city="San_francisco", train_GCPs={"San_francisco": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]}, model="RFM")
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function=linear, city="San_francisco", train_GCPs={"San_francisco": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]}, model="RFM")
 
     # Generate an accuracy plot for the PSM model with shift correction function
     accuracy_plot(no_eval_GCPs=1, optimized_function=shift, model="PSM")

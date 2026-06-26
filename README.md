@@ -43,7 +43,7 @@ For each supported city, make sure the following data are available:
 
 ### Download sources
 
-Use the following Planet links to obtain the data:
+Use the following links to obtain the data:
 
 - **San Francisco**  
   Download from:  
