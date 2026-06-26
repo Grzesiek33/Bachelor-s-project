@@ -42,9 +42,9 @@ def automated_optimize(correction_model = None, correction_for = None, model = "
     for city in train_set:
         for i in train_set[city]:
             for comb in combinations(train_GCPs[city], i):
-                optimize_camera_parameters({city: list(comb)}, correction_model, model, supress_warnings)
+                optimize_camera_parameters({city: list(comb)}, correction_model, model, supress_warnings, device=device)
 
-def optimize_camera_parameters(train_GCPs = "all", correction_model = None, model = "PSM", supress_warnings=True):
+def optimize_camera_parameters(train_GCPs = "all", correction_model = None, model = "PSM", supress_warnings=True, device=torch.device("cpu")):
     if correction_model is None:
         if model == "PSM":
             correction_model = {"correction_function": linear, "initial_params": zero_based_initial_params("linear", 7), "optimization_function": MSE, "q_constraint": 1, "correction_function_parameters": {"linear_constraint": 1e-4, "quadratic_constraint": 1e-12, "no_parameters": 7}, "method": "gradient", "lr":1e-9, "epochs":1000}
@@ -269,7 +269,7 @@ def optimize_camera_parameters(train_GCPs = "all", correction_model = None, mode
                                 row = realGCPsposition[ct][fr]["GCPs"][GCP]["row"]
                                 col = realGCPsposition[ct][fr]["GCPs"][GCP]["col"]
 
-                                im_y, im_x = model(B, L, H)
+                                im_x, im_y = model(B, L, H)
 
                                 total_error = total_error + correction_model["optimization_function"](col, row, im_x, im_y)
 
@@ -318,7 +318,7 @@ def optimize_camera_parameters(train_GCPs = "all", correction_model = None, mode
                                 row = realGCPsposition[ct][fr]["GCPs"][GCP]["row"]
                                 col = realGCPsposition[ct][fr]["GCPs"][GCP]["col"]
 
-                                im_y, im_x = model(B, L, H)
+                                im_x, im_y = model(B, L, H)
 
                                 total_error = total_error + correction_model["optimization_function"](col, row, im_x, im_y)
 
@@ -333,7 +333,7 @@ def optimize_camera_parameters(train_GCPs = "all", correction_model = None, mode
         optimized_params = result.x.tolist()
 
     else:
-        params = torch.from_numpy(correction_model["initial_params"]).clone().detach().requires_grad_(True)
+        params = torch.from_numpy(correction_model["initial_params"]).clone().detach().to(device).requires_grad_(True)
 
         if "lr" not in correction_model:
             if not supress_warnings:
@@ -360,7 +360,10 @@ def optimize_camera_parameters(train_GCPs = "all", correction_model = None, mode
     if correction_model["method"] not in optimized_results:
         optimized_results[correction_model["method"]] = {}
 
-    optimized_results[correction_model["method"]][str(train_GCPs)] = optimized_params
+    if str(correction_model["correction_function_parameters"]) not in optimized_results[correction_model["method"]]:
+        optimized_results[correction_model["method"]][str(correction_model["correction_function_parameters"])] = {}
+
+    optimized_results[correction_model["method"]][str(correction_model["correction_function_parameters"])][str(train_GCPs)] = optimized_params
 
     with open("../../optimization/" + correction_model["correction_function"].__name__ + '_' + model + ".json", "w") as f:
      json.dump(optimized_results, f, indent=2)
@@ -375,8 +378,8 @@ if __name__ == "__main__":
     # only one GCP San Francisco
 
     # automated_optimize(model = "RFM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]}, correction_for=["1293562080.02321601_sc00113_c1_PAN_i0000000185"])
-    # automated_optimize(model = "PSM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1,2]}, correction_for=["1293562080.02321601_sc00113_c1_PAN_i0000000185"])
-    automated_optimize(model = "PSM", correction_model={"correction_function": rotation}, train_set={"San_francisco": [1]}, device=device)
+    automated_optimize(model = "PSM", correction_model={"correction_function": shift}, train_set={"San_francisco": [2]})
+    automated_optimize(model = "RFM", correction_model={"correction_function": shift}, train_set={"San_francisco": [1]}, device=device)
 
     # optimize_camera_parameters(model = "RFM", correction_model={"correction_function": shift})
     # optimize_camera_parameters(model = "PSM", correction_model={"correction_function": shift})

@@ -2,7 +2,7 @@ import json
 import numpy as np
 import torch
 
-def PSM(P_camera, P_intrinsic, quaternion, sat_position, device, numpy=False):
+def PSM(P_camera, P_intrinsic, quaternion, sat_position, device=torch.device("cpu"), numpy=False):
 
     if numpy:
         def model(x_ecef, y_ecef, z_ecef):
@@ -19,7 +19,7 @@ def PSM(P_camera, P_intrinsic, quaternion, sat_position, device, numpy=False):
 
     return model
 
-def create_extrinsic(quaternion, sat_position, device, numpy=False):
+def create_extrinsic(quaternion, sat_position, device=torch.device("cpu"), numpy=False):
     qw, qx, qy, qz = quaternion
     sat_x, sat_y, sat_z = sat_position
 

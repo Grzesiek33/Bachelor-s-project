@@ -1,4 +1,6 @@
 import json
+import os.path
+
 from shapely import wkt
 import matplotlib
 import rasterio
@@ -16,9 +18,10 @@ from src.utils.cities import supported_cities
 
 
 def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_optimized_GCPs: bool = True, show_real_GCPs: bool = True,  optimized_function = "linear", train_GCPs = None,
-                       method: str = 'Nelder-Mead', model = "both", city="San_francisco", colors = None):
+                       method: str = 'Nelder-Mead', model = "both", city="San_francisco", colors = None, correction_function_parameters = None):
 
-    # frame
+    assert model in ["PSM", "RFM", "both"], "Model must be 'PSM', 'RFM', or 'both'."
+    assert os.path.exists(f"../../{city}/l1a_frames/"+frame_path+".tif"), f"Frame {frame_path} does not exist in city {city}."
 
     with rasterio.open(f"../../{city}/l1a_frames/"+frame_path+".tif") as src:
         img = src.read(1).astype(np.float32)
@@ -29,10 +32,8 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
         profile = src.profile
         profile.update(dtype=rasterio.uint8)
 
-        # Acquire default dots per inch value of matplotlib
         dpi = matplotlib.rcParams['figure.dpi']
 
-        # Determine the figures size in inches to fit your image
         height, width = img.shape
         figsize = width / float(dpi), height / float(dpi)
 
@@ -40,7 +41,34 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
         plt.imshow(img_scaled, cmap="gray", origin="upper", vmin=np.percentile(img_scaled,2), vmax=np.percentile(img_scaled,98))
 
-    # data
+    if correction_function_parameters is None:
+        if model == "PSM":
+            correction_function_parameters = {"linear_constraint": 1e-4, "quadratic_constraint": 1e-12, "no_parameters": 7}
+        elif model == "RFM":
+            correction_function_parameters = {"linear_constraint": 1, "quadratic_constraint": 1, "no_parameters": 80}
+
+    assert os.path.exists(f"../../{city}/own_GCPs/GCPs.json"), f"GCPs data does not exist for {city}."
+    with open(f"../../{city}/own_GCPs/GCPs.json", "r") as f:
+        GCPinfo = json.load(f)
+
+    if model == "PSM" or model == "both":
+        assert os.path.exists(f"../../{city}/l1a_frames/"+frame_path+"_pinhole.json"), f"PSM data does not exist for frame {frame_path} in {city}."
+        with open(f"../../{city}/l1a_frames/" + frame_path + "_pinhole.json", "r") as f:
+            FramePSMinfo = json.load(f)
+
+        assert "P_projective" in FramePSMinfo and "P_camera" in FramePSMinfo and "P_intrinsic" in FramePSMinfo, f"PSM data for frame {frame_path} in {city} is missing required matrices."
+    if model == "RFM" or model == "both":
+        assert os.path.exists(f"../../{city}/frameRPC.json"), f"RFM data does not exist for city {city}."
+
+        with open(f"../../{city}/frameRPC.json", "r") as f:
+            FrameRFMinfo = json.load(f)
+
+        assert frame_path in FrameRFMinfo, f"Frame {frame_path} does not exist in RFM data for city {city}."
+
+        FrameRFMinfo = FrameRFMinfo[frame_path]
+
+
+    assert os.path.exists(f"../../{city}/own_GCPs/image_position.json"), f"GCPs image position data does not exist for city {city}."
 
     with open(f"../../{city}/own_GCPs/image_position.json", "r") as f:
         FrameGCPs = json.load(f)
@@ -63,16 +91,6 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
         raise ValueError(f"Not enough colors provided for the number of GCPs. {len(GCPs)} GCPs but only {len(colors)} colors.")
 
     GCPs_colors = {GCP: colors[i % len(colors)] for i, GCP in enumerate(GCPs)}
-
-
-    with open(f"../../{city}/l1a_frames/"+frame_path+"_pinhole.json", "r") as f:
-        FramePSMinfo = json.load(f)
-
-    with open(f"../../{city}/frameRPC.json", "r") as f:
-        FrameRFMinfo = json.load(f)[frame_path]
-
-    with open(f"../../{city}/own_GCPs/GCPs.json", "r") as f:
-        GCPinfo = json.load(f)
 
     realGCPsposition = {}
 
@@ -107,13 +125,13 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
     if show_projected_GCPs:
         if(model == "both" or model == "RFM"):
-            RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
+            RFM_model = RFM(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                         FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                         FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
                         FrameRFMinfo["SAMP_SCALE"], torch.tensor(FrameRFMinfo["LINE_NUM_COEFFS"], dtype=torch.float64),
                         torch.tensor(FrameRFMinfo["LINE_DEN_COEFFS"], dtype=torch.float64),
                         torch.tensor(FrameRFMinfo["SAMP_NUM_COEFFS"], dtype=torch.float64),
-                        torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64))
+                        torch.tensor(FrameRFMinfo["SAMP_DEN_COEFFS"], dtype=torch.float64), numpy=False)
         for GCP in GCPs:
             meta_data = GCPinfo[GCP]
             x_ecef = float(meta_data["x_ecef"])
@@ -133,16 +151,22 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                 plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="x", label=f"{GCP} PSM", s=100)
 
             if (model == "both" or model == "RFM"):
-                im_y, im_x = RFM_model(B, L, H)
+                im_x, im_y = RFM_model(B, L, H)
                 if model == "both" or model == "RFM":
                     plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="+", label=f"{GCP} RFM", s=100)
 
     if show_optimized_GCPs:
         if model == "both" or model == "RFM":
+
+            assert os.path.exists(f"../../optimization/" + optimized_function + "_RFM.json"), f"Optimized RFM parameters for function {optimized_function} do not exist."
             with open(f"../../optimization/" + optimized_function + "_RFM.json", "r") as f:
                 optimized_results_RFM = json.load(f)
 
-            params = optimized_results_RFM[method][str(train_GCPs)]
+            assert method in optimized_results_RFM, f"Method {method} not found in optimized RFM results."
+            assert str(correction_function_parameters) in optimized_results_RFM[method], f"Correction function parameters {correction_function_parameters} not found in optimized RFM results for method {method}."
+            assert str(train_GCPs) in optimized_results_RFM[method][str(correction_function_parameters)], f"Train GCPs {train_GCPs} not found in optimized RFM results for method {method}."
+
+            params = optimized_results_RFM[method][str(correction_function_parameters)][str(train_GCPs)]
 
             params = torch.tensor(params, dtype=torch.float64)
 
@@ -156,16 +180,23 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
 
             line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs = torch.split(correction_function_RFM(params), [20, 20, 20, 20])
 
-            RFM_model = RFM_torch(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
+            RFM_model = RFM(FrameRFMinfo["LAT_OFF"], FrameRFMinfo["LAT_SCALE"], FrameRFMinfo["LONG_OFF"],
                     FrameRFMinfo["LONG_SCALE"], FrameRFMinfo["HEIGHT_OFF"], FrameRFMinfo["HEIGHT_SCALE"],
                     FrameRFMinfo["LINE_OFF"], FrameRFMinfo["LINE_SCALE"], FrameRFMinfo["SAMP_OFF"],
-                    FrameRFMinfo["SAMP_SCALE"], line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs)
+                    FrameRFMinfo["SAMP_SCALE"], line_num_coeffs, line_den_coeffs, samp_num_coeffs, samp_den_coeffs, numpy=False)
 
         if model == "both" or model == "PSM":
+
+            assert os.path.exists(f"../../optimization/" + optimized_function + "_PSM.json"), f"Optimized PSM parameters for function {optimized_function} do not exist."
+
             with open(f"../../optimization/" + optimized_function + "_PSM.json", "r") as f:
                 optimized_results_PSM = json.load(f)
 
-            corrected_exterior_rotation = optimized_results_PSM[method][str(train_GCPs)]
+            assert method in optimized_results_PSM, f"Method {method} not found in optimized PSM results."
+            assert str(correction_function_parameters) in optimized_results_PSM[method], f"Correction function parameters {correction_function_parameters} not found in optimized PSM results for method {method}."
+            assert str(train_GCPs) in optimized_results_PSM[method][str(correction_function_parameters)], f"Train GCPs {train_GCPs} not found in optimized PSM results for method {method}."
+
+            corrected_exterior_rotation = optimized_results_PSM[method][str(correction_function_parameters)][str(train_GCPs)]
 
             original_exterior_rotation = FramePSMinfo["exterior_orientation"]
 
@@ -208,7 +239,7 @@ def show_GCPs_on_frame(frame_path: str, show_projected_GCPs: bool = True, show_o
                     plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="o", label=f"{GCP} (corrected position PSM)", s=100)
 
                 if model == "both" or model == "RFM":
-                    im_y, im_x = RFM_model(B, L, H)
+                    im_x, im_y = RFM_model(B, L, H)
                     plt.scatter(im_x, im_y, color=GCPs_colors[GCP], marker="*", label=f"{GCP} (corrected position RFM)", s=100)
 
     if show_real_GCPs:
@@ -236,7 +267,7 @@ if __name__ == "__main__":
     # show_GCPs_on_frame("1293562079.26564479_sc00113_c1_PAN_i0000000150", method_PSM="gradient", optimized_function="shift")
 
 
-    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="rotation", method="gradient", city="San_francisco", train_GCPs={"San_francisco": ["1"]}, model="PSM")
+    show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", optimized_function="shift", method="gradient", city="San_francisco", train_GCPs={"San_francisco": ["1"]}, model="RFM")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method="gradient", optimized_function="linear")
     # show_GCPs_on_frame("1293562080.02321601_sc00113_c1_PAN_i0000000185", method_PSM="gradient", optimized_function="quadratic")
 

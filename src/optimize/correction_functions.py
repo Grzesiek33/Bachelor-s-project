@@ -13,7 +13,7 @@ def zero_based_initial_params(correction_function, no_parameters):
     else:
         raise ValueError(f"Unknown initial parameters for correction function: {correction_function}")
 
-def linear(args, no_parameters, device, numpy=False, linear_constraint=1e-4, **kwargs):
+def linear(args, no_parameters, device=torch.device("cpu"), numpy=False, linear_constraint=1e-4, **kwargs):
     if numpy:
 
         eye = np.eye(no_parameters, dtype=np.float64)
@@ -35,7 +35,7 @@ def linear(args, no_parameters, device, numpy=False, linear_constraint=1e-4, **k
 
     return fun
 
-def quadratic(args, no_parameters, device, numpy=False, linear_constraint=1e-4, quadratic_constraint=1e-12, **kwargs):
+def quadratic(args, no_parameters, device=torch.device("cpu"), numpy=False, linear_constraint=1e-4, quadratic_constraint=1e-12, **kwargs):
     if numpy:
 
         eye = np.eye(no_parameters, dtype=np.float64)

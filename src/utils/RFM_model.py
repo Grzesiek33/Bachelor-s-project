@@ -2,7 +2,7 @@ import torch
 import numpy
 
 
-def RFM(lat_off, lat_scale, long_off, long_scale, height_off, height_scale, line_off, line_scale, samp_off, samp_scale, Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs, device, numpy=False):
+def RFM(lat_off, lat_scale, long_off, long_scale, height_off, height_scale, line_off, line_scale, samp_off, samp_scale, Line_num_coeffs, Line_den_coeffs, Samp_num_coeffs, Samp_den_coeffs, device=torch.device("cpu"), numpy=False):
 
     if not numpy:
         def model(B, L, H):
@@ -32,7 +32,7 @@ def RFM(lat_off, lat_scale, long_off, long_scale, height_off, height_scale, line
         H*H*H], dtype=torch.float64, device=device)
             l = (Line_num_coeffs @ args) / (Line_den_coeffs @ args)
             s = (Samp_num_coeffs @ args) / (Samp_den_coeffs @ args)
-            return l * line_scale + line_off, s * samp_scale + samp_off
+            return s * samp_scale + samp_off, l * line_scale + line_off
     else:
         def model(B, L, H):
             B = (B - lat_off) / lat_scale
@@ -61,6 +61,6 @@ def RFM(lat_off, lat_scale, long_off, long_scale, height_off, height_scale, line
                                 H * H * H], dtype=numpy.float64)
             l = (Line_num_coeffs @ args) / (Line_den_coeffs @ args)
             s = (Samp_num_coeffs @ args) / (Samp_den_coeffs @ args)
-            return l * line_scale + line_off, s * samp_scale + samp_off
+            return s * samp_scale + samp_off, l * line_scale + line_off
 
     return model
