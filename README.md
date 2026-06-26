@@ -27,6 +27,7 @@ The project is written in Python and uses libraries such as:
 - Rasterio
 - Shapely
 - SymPy
+- cv2 (OpenCV)
 
 If needed, install the dependencies in your environment before running the scripts.
 
