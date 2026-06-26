@@ -6,7 +6,7 @@ This repository contains code for working with satellite image geolocation model
 - `Angkor_wat`
 - `Cocabamba`
 
-The code includes utilities for parsing metadata, building RPC/PSM/RFM-based models, optimizing correction parameters, and visualizing accuracy results.
+The code includes utilities for parsing metadata, building PSM and RFM models, optimizing correction parameters, and visualizing accuracy results.
 
 ## Repository structure
 
